@@ -100,27 +100,52 @@ impl<T> RedBlackTree<T> {
     pub fn new(root: Option<NodeId>, nodes: Vec<ColorNode<T>>) -> Self {
         Self { root, nodes }
     }
+}
 
-    // Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
-    // returned. Otherwise None is returned.
+/// Helper functions
+impl<T> RedBlackTree<T> {
+    /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
+    /// returned. Otherwise None is returned.
     pub fn get(&self, id: NodeId) -> Option<&ColorNode<T>> {
         self.nodes.get(*id.as_usize())
     }
 
-    // Retrieves a Node by Id, returning the node's parent if it exists.
+    /// Retrieves a the parent of a Node, Optionally returning a reference to
+    /// the parent Node if it exists.
     pub fn get_parent(&self, id: NodeId) -> Option<&ColorNode<T>> {
-        self.nodes.get(*id.as_usize()).and_then(|node| {
+        self.get(id).and_then(|node| {
             node.as_inner()
                 .parent
                 .and_then(|parent_id| self.get(parent_id))
         })
     }
 
+    /// Retrieves the parent of a Node's parent, Optionally returning a
+    /// reference to the grandparent Node if it exists.
     pub fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<T>> {
-        self.nodes.get(*id.as_usize()).and_then(|node| {
+        self.get_parent(id).and_then(|node| {
             node.as_inner()
                 .parent
                 .and_then(|parent_id| self.get(parent_id))
         })
+    }
+
+    /// Retrieves the sibling of a Node, Optionally returning a reference to the
+    /// sibling Node if it exists.
+    pub fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<T>> {
+        self.get_parent(id)
+            .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
+                // return any leaf that doesn't match the original id or none.
+                (_, Some(leaf_id)) if leaf_id != id => self.get(leaf_id),
+                (Some(leaf_id), _) if leaf_id != id => self.get(leaf_id),
+                _ => None,
+            })
+    }
+
+    /// Retrieves the uncle of a Node, Optionally returning a reference to the
+    /// uncle Node if it exists.
+    pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<T>> {
+        self.get_parent(id)
+            .and_then(|node| self.get_sibling(node.as_inner().id))
     }
 }
