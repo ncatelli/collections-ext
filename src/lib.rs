@@ -202,6 +202,13 @@ impl<T> RedBlackTree<T> {
         })
     }
 
+    /// Retrieves the uncle of a Node, Optionally returning a reference to the
+    /// uncle Node if it exists.
+    pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<T>> {
+        self.get_parent(id)
+            .and_then(|node| self.get_sibling(node.as_inner().id))
+    }
+
     /// Retrieves the sibling of a Node, Optionally returning a reference to the
     /// sibling Node if it exists.
     pub fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<T>> {
@@ -214,11 +221,32 @@ impl<T> RedBlackTree<T> {
             })
     }
 
-    /// Retrieves the uncle of a Node, Optionally returning a reference to the
-    /// uncle Node if it exists.
-    pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<T>> {
-        self.get_parent(id)
-            .and_then(|node| self.get_sibling(node.as_inner().id))
+    /// Retrieves the close nephew of a Node, Optionally returning a reference
+    /// to the close nephew Node if it exists.
+    pub fn get_close_nephew(&self, id: NodeId) -> Option<&ColorNode<T>> {
+        let direction = self.get_direction_of_node(id)?;
+
+        self.get_sibling(id)
+            .and_then(|node| match direction {
+                Direction::Left => node.as_inner().right,
+                Direction::Right => node.as_inner().left,
+            })
+            // Attempt to lookup the node after unpacking it from the sibling.
+            .and_then(|nephew_id| self.get(nephew_id))
+    }
+
+    /// Retrieves the distant nephew of a Node, Optionally returning a reference
+    /// to the distant nephew Node if it exists.
+    pub fn get_distant_nephew(&self, id: NodeId) -> Option<&ColorNode<T>> {
+        let direction = self.get_direction_of_node(id)?;
+
+        self.get_sibling(id)
+            .and_then(|node| match direction {
+                Direction::Left => node.as_inner().left,
+                Direction::Right => node.as_inner().right,
+            })
+            // Attempt to lookup the node after unpacking it from the sibling.
+            .and_then(|nephew_id| self.get(nephew_id))
     }
 
     /// Retrieves the direction of a node from it's parent.
