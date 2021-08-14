@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut tree = RedBlackTree::new(vec![]);
+        let mut tree = RedBlackTree::default();
 
         tree.insert_mut(10u64);
         tree.insert_mut(5u64);
