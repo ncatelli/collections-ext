@@ -437,10 +437,10 @@ mod tests {
         assert!(!tree.is_empty());
 
         assert_eq!(SearchResult::Hit(NodeId::from(1)), tree.search(&5));
-        let _ = tree.get(NodeId::from(1)).map(|child| {
-            assert_eq!(Color::Red, child.color());
-            assert_eq!(Some(NodeId::from(0)), child.as_inner().parent);
-            assert_eq!(5, child.as_inner().inner);
-        });
+
+        let child = tree.get(NodeId::from(1)).unwrap();
+        assert_eq!(Color::Red, child.color());
+        assert_eq!(Some(NodeId::from(0)), child.as_inner().parent);
+        assert_eq!(5, child.as_inner().inner);
     }
 }
