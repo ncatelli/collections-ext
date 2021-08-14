@@ -24,12 +24,21 @@ impl From<usize> for NodeId {
     }
 }
 
+/// Node represents an interior node to the Red-Black Tree, storing
+/// information about direct ancestor/descendent nodes as well as an inner
+/// value denoted by type T.
 #[derive(Debug, Clone)]
 pub struct Node<T> {
+    /// A unique identifier for the node
     id: NodeId,
+    /// An inner value stored in the tree.
     inner: T,
+    /// An optional parent node. A value of None signifies that this node is
+    /// the root.
     parent: Option<NodeId>,
+    /// An optional left-side direcitonaldescendant node.
     left: Option<NodeId>,
+    /// An optional right-side direcitonaldescendant node.
     right: Option<NodeId>,
 }
 
@@ -69,6 +78,14 @@ impl<T> Node<T> {
     }
 }
 
+/// An enumerable value representing the available colors of a node.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Color {
+    Red,
+    Black,
+}
+
+/// ColorNode Wraps a node, with an optional Color value.
 #[derive(Debug, Clone)]
 pub enum ColorNode<T> {
     Red(Node<T>),
@@ -76,20 +93,55 @@ pub enum ColorNode<T> {
 }
 
 impl<T> ColorNode<T> {
+    /// Borrows and returns the inner value of the node.
     pub fn as_inner(&self) -> &Node<T> {
         match self {
             ColorNode::Red(inner) | ColorNode::Black(inner) => inner,
         }
     }
 
+    /// Mutably borrows and returns the inner value of the node.
+    pub fn as_inner_mut(&mut self) -> &mut Node<T> {
+        match self {
+            ColorNode::Red(inner) | ColorNode::Black(inner) => inner,
+        }
+    }
+
+    /// Returns the inner value, `T` of the node, consuming the enclosing
+    /// `Node<T>`.
+    pub fn into_inner(self) -> Node<T> {
+        match self {
+            ColorNode::Red(inner) | ColorNode::Black(inner) => inner,
+        }
+    }
+
+    /// Inverts the color of a node, rewrapping the nodes inner value.
     pub fn flip_color(self) -> Self {
         match self {
             Self::Red(inner) => Self::Black(inner),
             Self::Black(inner) => Self::Red(inner),
         }
     }
+
+    /// Returns the Color of a node.
+    pub fn color(&self) -> Color {
+        match self {
+            Self::Red(_) => Color::Red,
+            Self::Black(_) => Color::Black,
+        }
+    }
 }
 
+impl<T> From<(Color, Node<T>)> for ColorNode<T> {
+    fn from((color, node): (Color, Node<T>)) -> Self {
+        match color {
+            Color::Red => ColorNode::Red(node),
+            Color::Black => ColorNode::Black(node),
+        }
+    }
+}
+
+/// An implementation of a Red-Black Tree
 #[derive(Debug, Default, Clone)]
 pub struct RedBlackTree<T> {
     root: Option<NodeId>,
@@ -97,8 +149,16 @@ pub struct RedBlackTree<T> {
 }
 
 impl<T> RedBlackTree<T> {
-    pub fn new(root: Option<NodeId>, nodes: Vec<ColorNode<T>>) -> Self {
-        Self { root, nodes }
+    /// Instantiates a new instance of RedBlackTree, making the first item in
+    /// the passed vector the root node.
+    pub fn new(nodes: Vec<ColorNode<T>>) -> Self {
+        match nodes.get(0) {
+            Some(node_id) => Self {
+                root: Some(node_id.as_inner().id),
+                nodes,
+            },
+            None => Self { root: None, nodes },
+        }
     }
 }
 
