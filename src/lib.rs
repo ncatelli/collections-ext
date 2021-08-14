@@ -153,6 +153,38 @@ pub enum Direction {
     Right,
 }
 
+/// SearchResult represents the results of a binary tree search.
+#[derive(Debug)]
+pub enum SearchResult {
+    /// Hit signifies the exact value was found in the tree and
+    /// contains a reference to the NodeId for said value.
+    Hit(NodeId),
+    /// Miss represents the value was not found in the tree and represents the
+    /// nearest parent node.
+    Miss(NodeId),
+    /// Empty represents an empty tree.
+    Empty,
+}
+
+/// Captures the state of a tree walk.
+enum WalkStep {
+    /// Continue encloses the next node to check for a match in a binary walk.
+    Continue(NodeId),
+    /// Signifies the end node in walk and that the walk should stop.
+    Stop(NodeId),
+}
+
+impl WalkStep {
+    /// Unpacks a `WalkStep::Stop` into an Option. Returning `None` if the
+    /// variant is not `Stop`.
+    fn stop_or(self) -> Option<NodeId> {
+        match self {
+            WalkStep::Stop(inner) => Some(inner),
+            _ => None,
+        }
+    }
+}
+
 /// An implementation of a Red-Black Tree
 #[derive(Debug, Default, Clone)]
 pub struct RedBlackTree<V> {
@@ -180,11 +212,67 @@ impl<V> RedBlackTree<V> {
 }
 
 /// Helper functions
-impl<V> RedBlackTree<V> {
+impl<V> RedBlackTree<V>
+where
+    V: PartialEq + PartialOrd,
+{
     /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
     /// returned. Otherwise None is returned.
     pub fn get(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.nodes.get(id.to_usize())
+    }
+
+    /// Searches for a value in the tree returning a SearchResult that
+    /// captures if the search yield a hit, miss or empty tree.  
+    pub fn search(&self, value: &V) -> SearchResult {
+        self.root.map_or_else(
+            || SearchResult::Empty,
+            |root| {
+                let mut next_step = WalkStep::Continue(root);
+                while let WalkStep::Continue(next_id) = next_step {
+                    next_step = self.next_step(next_id, value);
+                }
+
+                next_step
+                    .stop_or()
+                    .and_then(|last| {
+                        self.get(last).map(|last_color_node| {
+                            let last_node = last_color_node.as_inner();
+                            if value == &last_node.inner {
+                                SearchResult::Hit(last)
+                            } else {
+                                SearchResult::Miss(last)
+                            }
+                        })
+                    })
+                    // Unwraps should be safe. these will always exist.
+                    .unwrap()
+            },
+        )
+    }
+
+    /// Returns an option representing the next step in a tree walk. If `None`
+    /// is returned. There are no further steps to take. Otherwise the the
+    /// direction of the next step is returned.
+    fn next_step(&self, base_id: NodeId, value: &V) -> WalkStep {
+        // panic if no node.
+        let node = self.get(base_id).unwrap().as_inner();
+
+        if value == &node.inner {
+            WalkStep::Stop(base_id)
+        } else if value < &node.inner {
+            // if left leaf exists follow that direction.
+            match node.left {
+                Some(next) => WalkStep::Continue(next),
+                None => WalkStep::Stop(base_id),
+            }
+        } else {
+            // if right leaf exists follow that direction.
+            match node.right {
+                Some(next) => WalkStep::Continue(next),
+                None => WalkStep::Stop(base_id),
+            }
+        }
     }
 
     /// Inserts a value into the tree. if the value already exists,
