@@ -1,18 +1,22 @@
-use std::fmt::Debug;
+//! A naive implementation of a red-black tree for education purposes.
 
-/// NodeId represents an Id for a node. This must be able to convert cleanly between a usize and
+/// NodeId represents an Id for a node. This must be able to convert cleanly
+/// between a usize and
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct NodeId(usize);
 
 impl NodeId {
+    /// Instantiates a NodeId from a usize value.
     pub fn new(inner: usize) -> Self {
         Self(inner)
     }
 
+    /// Converts the NodeId to a usize.
     pub fn to_usize(self) -> usize {
         self.0
     }
 
+    /// Borrows the enclosuing usize value of the NodeId.
     pub fn as_usize(&self) -> &usize {
         &self.0
     }
@@ -20,7 +24,7 @@ impl NodeId {
 
 impl From<usize> for NodeId {
     fn from(id: usize) -> Self {
-        Self(id)
+        Self::new(id)
     }
 }
 
@@ -167,7 +171,7 @@ impl<T> RedBlackTree<T> {
     /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
     /// returned. Otherwise None is returned.
     pub fn get(&self, id: NodeId) -> Option<&ColorNode<T>> {
-        self.nodes.get(*id.as_usize())
+        self.nodes.get(id.to_usize())
     }
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
