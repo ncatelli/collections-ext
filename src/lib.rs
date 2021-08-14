@@ -34,16 +34,16 @@ impl From<usize> for NodeId {
 #[derive(Debug, Clone)]
 pub struct Node<V> {
     /// A unique identifier for the node
-    id: NodeId,
+    pub id: NodeId,
     /// An inner value stored in the tree.
-    inner: V,
+    pub inner: V,
     /// An optional parent node. A value of None signifies that this node is
     /// the root.
-    parent: Option<NodeId>,
+    pub parent: Option<NodeId>,
     /// An optional left-side direcitonaldescendant node.
-    left: Option<NodeId>,
+    pub left: Option<NodeId>,
     /// An optional right-side direcitonaldescendant node.
-    right: Option<NodeId>,
+    pub right: Option<NodeId>,
 }
 
 impl<V> Node<V> {
@@ -80,6 +80,11 @@ impl<V> Node<V> {
     pub fn is_leaf(&self) -> bool {
         self.left.is_none() && self.right.is_none()
     }
+
+    /// Returns the inner value of the Node.
+    pub fn unwrap(self) -> V {
+        self.inner
+    }
 }
 
 /// An enumerable value representing the available colors of a node.
@@ -87,6 +92,15 @@ impl<V> Node<V> {
 pub enum Color {
     Red,
     Black,
+}
+
+impl Color {
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Black => Self::Red,
+            Self::Red => Self::Black,
+        }
+    }
 }
 
 /// ColorNode Wraps a node, with an optional Color value.
@@ -154,7 +168,7 @@ pub enum Direction {
 }
 
 /// SearchResult represents the results of a binary tree search.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SearchResult {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
@@ -222,6 +236,12 @@ where
         self.nodes.get(id.to_usize())
     }
 
+    /// Retrieves a mutable Node by Id. If the Id exists in the tree,
+    /// Some<&mut Node> is returned. Otherwise None is returned.
+    pub fn get_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
+        self.nodes.get_mut(id.to_usize())
+    }
+
     /// Searches for a value in the tree returning a SearchResult that
     /// captures if the search yield a hit, miss or empty tree.  
     pub fn search(&self, value: &V) -> SearchResult {
@@ -278,8 +298,49 @@ where
     /// Inserts a value into the tree. if the value already exists,
     /// Some(NodeId) to the already defined value is returned. Otherwise None
     /// is returned.
-    pub fn insert_mut(&mut self, _value: V) -> Option<NodeId> {
-        todo!()
+    pub fn insert_mut(&mut self, value: V) -> Option<NodeId> {
+        let next_id = NodeId::from(self.nodes.len());
+        let mut child_color = Color::Black;
+        match self.search(&value) {
+            SearchResult::Hit(node) => Some(node),
+            SearchResult::Empty => {
+                self.root = Some(next_id);
+                self.nodes.push(ColorNode::Black(Node::new(
+                    next_id, value, None, None, None,
+                )));
+                None
+            }
+            SearchResult::Miss(parent_node_id) => {
+                let is_defined = match self.get_mut(parent_node_id) {
+                    Some(parent_color_node) => {
+                        child_color = parent_color_node.color().flip();
+
+                        let parent_inner = parent_color_node.as_inner_mut();
+
+                        if value < parent_inner.inner {
+                            parent_inner.left = Some(next_id);
+                            None
+                        } else if value > parent_inner.inner {
+                            parent_inner.right = Some(next_id);
+                            None
+                        } else {
+                            Some(parent_inner.id)
+                        }
+                    }
+                    None => None,
+                };
+
+                if is_defined.is_some() {
+                    is_defined
+                } else {
+                    self.nodes.push(ColorNode::from((
+                        child_color,
+                        Node::new(next_id, value, Some(parent_node_id), None, None),
+                    )));
+                    None
+                }
+            }
+        }
     }
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
@@ -357,5 +418,28 @@ where
                 (_, Some(leaf_id)) if leaf_id == id => Some(Direction::Right),
                 _ => None,
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let mut tree = RedBlackTree::new(vec![]);
+
+        tree.insert_mut(10u64);
+        tree.insert_mut(5u64);
+        tree.insert_mut(15u64);
+
+        assert!(!tree.is_empty());
+
+        assert_eq!(SearchResult::Hit(NodeId::from(1)), tree.search(&5));
+        let _ = tree.get(NodeId::from(1)).map(|child| {
+            assert_eq!(Color::Red, child.color());
+            assert_eq!(Some(NodeId::from(0)), child.as_inner().parent);
+            assert_eq!(5, child.as_inner().inner);
+        });
     }
 }
