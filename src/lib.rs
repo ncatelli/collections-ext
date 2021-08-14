@@ -301,6 +301,7 @@ where
     pub fn insert_mut(&mut self, value: V) -> Option<NodeId> {
         let next_id = NodeId::from(self.nodes.len());
         let mut child_color = Color::Black;
+
         match self.search(&value) {
             SearchResult::Hit(node) => Some(node),
             SearchResult::Empty => {
