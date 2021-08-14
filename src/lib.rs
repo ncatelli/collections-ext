@@ -2,7 +2,7 @@
 
 /// NodeId represents an Id for a node. This must be able to convert cleanly
 /// between a usize and
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(usize);
 
 impl NodeId {
@@ -145,6 +145,14 @@ impl<T> From<(Color, Node<T>)> for ColorNode<T> {
     }
 }
 
+/// Direction represents the directional branch that a given child is on for
+/// a given node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Left,
+    Right,
+}
+
 /// An implementation of a Red-Black Tree
 #[derive(Debug, Default, Clone)]
 pub struct RedBlackTree<T> {
@@ -200,8 +208,8 @@ impl<T> RedBlackTree<T> {
         self.get_parent(id)
             .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
                 // return any leaf that doesn't match the original id or none.
-                (_, Some(leaf_id)) if leaf_id != id => self.get(leaf_id),
                 (Some(leaf_id), _) if leaf_id != id => self.get(leaf_id),
+                (_, Some(leaf_id)) if leaf_id != id => self.get(leaf_id),
                 _ => None,
             })
     }
@@ -211,5 +219,15 @@ impl<T> RedBlackTree<T> {
     pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<T>> {
         self.get_parent(id)
             .and_then(|node| self.get_sibling(node.as_inner().id))
+    }
+
+    /// Retrieves the direction of a node from it's parent.
+    pub fn get_direction_of_node(&self, id: NodeId) -> Option<Direction> {
+        self.get_parent(id)
+            .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
+                (Some(leaf_id), _) if leaf_id == id => Some(Direction::Left),
+                (_, Some(leaf_id)) if leaf_id == id => Some(Direction::Right),
+                _ => None,
+            })
     }
 }
