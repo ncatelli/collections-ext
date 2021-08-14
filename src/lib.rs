@@ -30,13 +30,13 @@ impl From<usize> for NodeId {
 
 /// Node represents an interior node to the Red-Black Tree, storing
 /// information about direct ancestor/descendent nodes as well as an inner
-/// value denoted by type T.
+/// value denoted by type V.
 #[derive(Debug, Clone)]
-pub struct Node<T> {
+pub struct Node<V> {
     /// A unique identifier for the node
     id: NodeId,
     /// An inner value stored in the tree.
-    inner: T,
+    inner: V,
     /// An optional parent node. A value of None signifies that this node is
     /// the root.
     parent: Option<NodeId>,
@@ -46,10 +46,10 @@ pub struct Node<T> {
     right: Option<NodeId>,
 }
 
-impl<T> Node<T> {
+impl<V> Node<V> {
     pub fn new(
         id: NodeId,
-        inner: T,
+        inner: V,
         parent: Option<NodeId>,
         left: Option<NodeId>,
         right: Option<NodeId>,
@@ -91,9 +91,9 @@ pub enum Color {
 
 /// ColorNode Wraps a node, with an optional Color value.
 #[derive(Debug, Clone)]
-pub enum ColorNode<T> {
-    Red(Node<T>),
-    Black(Node<T>),
+pub enum ColorNode<V> {
+    Red(Node<V>),
+    Black(Node<V>),
 }
 
 impl<T> ColorNode<T> {
@@ -155,15 +155,15 @@ pub enum Direction {
 
 /// An implementation of a Red-Black Tree
 #[derive(Debug, Default, Clone)]
-pub struct RedBlackTree<T> {
+pub struct RedBlackTree<V> {
     root: Option<NodeId>,
-    nodes: Vec<ColorNode<T>>,
+    nodes: Vec<ColorNode<V>>,
 }
 
-impl<T> RedBlackTree<T> {
+impl<V> RedBlackTree<V> {
     /// Instantiates a new instance of RedBlackTree, making the first item in
     /// the passed vector the root node.
-    pub fn new(nodes: Vec<ColorNode<T>>) -> Self {
+    pub fn new(nodes: Vec<ColorNode<V>>) -> Self {
         match nodes.get(0) {
             Some(node_id) => Self {
                 root: Some(node_id.as_inner().id),
@@ -180,16 +180,23 @@ impl<T> RedBlackTree<T> {
 }
 
 /// Helper functions
-impl<T> RedBlackTree<T> {
+impl<V> RedBlackTree<V> {
     /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
     /// returned. Otherwise None is returned.
-    pub fn get(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.nodes.get(id.to_usize())
+    }
+
+    /// Inserts a value into the tree. if the value already exists,
+    /// Some(NodeId) to the already defined value is returned. Otherwise None
+    /// is returned.
+    pub fn insert_mut(&mut self, _value: V) -> Option<NodeId> {
+        todo!()
     }
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
     /// the parent Node if it exists.
-    pub fn get_parent(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get_parent(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get(id).and_then(|node| {
             node.as_inner()
                 .parent
@@ -199,7 +206,7 @@ impl<T> RedBlackTree<T> {
 
     /// Retrieves the parent of a Node's parent, Optionally returning a
     /// reference to the grandparent Node if it exists.
-    pub fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get_parent(id).and_then(|node| {
             node.as_inner()
                 .parent
@@ -209,14 +216,14 @@ impl<T> RedBlackTree<T> {
 
     /// Retrieves the uncle of a Node, Optionally returning a reference to the
     /// uncle Node if it exists.
-    pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get_parent(id)
             .and_then(|node| self.get_sibling(node.as_inner().id))
     }
 
     /// Retrieves the sibling of a Node, Optionally returning a reference to the
     /// sibling Node if it exists.
-    pub fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get_parent(id)
             .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
                 // return any leaf that doesn't match the original id or none.
@@ -228,7 +235,7 @@ impl<T> RedBlackTree<T> {
 
     /// Retrieves the close nephew of a Node, Optionally returning a reference
     /// to the close nephew Node if it exists.
-    pub fn get_close_nephew(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get_close_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
         let direction = self.get_direction_of_node(id)?;
 
         self.get_sibling(id)
@@ -242,7 +249,7 @@ impl<T> RedBlackTree<T> {
 
     /// Retrieves the distant nephew of a Node, Optionally returning a reference
     /// to the distant nephew Node if it exists.
-    pub fn get_distant_nephew(&self, id: NodeId) -> Option<&ColorNode<T>> {
+    pub fn get_distant_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
         let direction = self.get_direction_of_node(id)?;
 
         self.get_sibling(id)
