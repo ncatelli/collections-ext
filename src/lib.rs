@@ -172,6 +172,11 @@ impl<T> RedBlackTree<T> {
             None => Self { root: None, nodes },
         }
     }
+
+    /// Returns a boolean representing if the tree is empty (root node is None).
+    pub fn is_empty(&self) -> bool {
+        self.root.is_none()
+    }
 }
 
 /// Helper functions
