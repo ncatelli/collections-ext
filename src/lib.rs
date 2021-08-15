@@ -186,6 +186,8 @@ enum Rebalance {
     LeftRight(NodeId),
     RightRight(NodeId),
     RightLeft(NodeId),
+    /// contains the parent, and uncle id of a node for recoloring.
+    Recolor(NodeId, NodeId),
     Continue(NodeId),
 }
 
@@ -413,6 +415,9 @@ where
                 Rebalance::LeftRight(_) => todo!(),
                 Rebalance::RightRight(_) => todo!(),
                 Rebalance::RightLeft(_) => todo!(),
+                Rebalance::Recolor(parent_id, uncle_id) => {
+                    next_step = self.recolor(parent_id, uncle_id)
+                }
                 Rebalance::Continue(next) => next_step = self.rebalance_step_mut(next),
             }
         }
@@ -442,27 +447,29 @@ where
                     })
             })
             // base node is not root and both parent and uncle are red.
-            .and_then(|(parent_id, uncle_id)| {
-                // flip parent color
-                let _ = self
-                    .get_mut(parent_id)
-                    .map(|parent_node| parent_node.flip_color_mut());
-                // flip uncle color
-                let _ = self
-                    .get_mut(uncle_id)
-                    .map(|uncle_node| uncle_node.flip_color_mut());
+            .and_then(|(parent_id, uncle_id)| self.recolor(parent_id, uncle_id))
+    }
 
-                // if grandparent is black, flip to red and recurse up.
-                self.get_grandparent(node_id)
-                    .map(|grandparent_color_node| grandparent_color_node.id())
-                    .and_then(|grandparent_id| {
-                        self.get_mut(grandparent_id)
-                            .map(|grandparent_node| match grandparent_node.color() {
-                                Color::Red => (),
-                                Color::Black => grandparent_node.flip_color_mut(),
-                            })
-                            .map(|_| Rebalance::Continue(grandparent_id))
+    fn recolor(&mut self, parent_id: NodeId, uncle_id: NodeId) -> Option<Rebalance> {
+        // flip parent color
+        let _ = self
+            .get_mut(parent_id)
+            .map(|parent_node| parent_node.flip_color_mut());
+        // flip uncle color
+        let _ = self
+            .get_mut(uncle_id)
+            .map(|uncle_node| uncle_node.flip_color_mut());
+
+        // if grandparent is black, flip to red and recurse up.
+        self.get_parent(parent_id)
+            .map(|grandparent_color_node| grandparent_color_node.id())
+            .and_then(|grandparent_id| {
+                self.get_mut(grandparent_id)
+                    .map(|grandparent_node| match grandparent_node.color() {
+                        Color::Red => (),
+                        Color::Black => grandparent_node.flip_color_mut(),
                     })
+                    .map(|_| Rebalance::Continue(grandparent_id))
             })
     }
 
