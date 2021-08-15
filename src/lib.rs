@@ -358,8 +358,6 @@ where
     /// is returned.
     pub fn insert_mut(&mut self, value: V) -> Option<NodeId> {
         let next_id = NodeId::from(self.nodes.len());
-        // new nodes should always be red.
-        let mut child_color = Color::Red;
 
         match self.search(&value) {
             SearchResult::Hit(node) => Some(node),
@@ -373,8 +371,6 @@ where
             SearchResult::Miss(parent_node_id) => {
                 let is_defined = match self.get_mut(parent_node_id) {
                     Some(parent_color_node) => {
-                        child_color = parent_color_node.color().flip();
-
                         let parent_inner = parent_color_node.as_inner_mut();
 
                         if value < parent_inner.inner {
@@ -393,9 +389,12 @@ where
                 if is_defined.is_some() {
                     is_defined
                 } else {
-                    self.nodes.push(ColorNode::from((
-                        child_color,
-                        Node::new(next_id, value, Some(parent_node_id), None, None),
+                    self.nodes.push(ColorNode::Red(Node::new(
+                        next_id,
+                        value,
+                        Some(parent_node_id),
+                        None,
+                        None,
                     )));
 
                     // rebalance the tree after a new insertions
@@ -428,20 +427,18 @@ where
                 // if the base node is not root and it's parent is red, continue.
                 self.get_parent(base_color_node.id())
                     // base node is not root.
-                    .and_then(|parent_color_node| {
-                        if parent_color_node.color() == Color::Red {
-                            Some(parent_color_node.id())
-                        } else {
-                            None
-                        }
+                    .and_then(|parent_color_node| match parent_color_node.color() {
+                        Color::Red => Some(parent_color_node.id()),
+                        Color::Black => None,
                     })
                     // base node is not root and parent is red.
                     .and_then(|parent_id| {
-                        self.get_uncle(node_id)
-                            .and_then(|uncle_color_node| match uncle_color_node.color() {
-                                Color::Red => Some((parent_id, uncle_color_node.id())),
+                        self.get_sibling(parent_id).and_then(|sibling_color_node| {
+                            match sibling_color_node.color() {
+                                Color::Red => Some((parent_id, sibling_color_node.id())),
                                 Color::Black => None,
-                            })
+                            }
+                        })
                     })
             })
             // base node is not root and both parent and uncle are red.
@@ -576,7 +573,6 @@ mod tests {
         let distant_nephew = 3;
         let uncle = 1;
         let grandparent = 0;
-
         let tree = vec![10, 5, 15, 3, 7, 20]
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
@@ -617,22 +613,25 @@ mod tests {
 
     #[test]
     fn should_paint_newly_inserted_nodes_red() {
-        let tree = vec![10, 5, 15]
+        let node_values = [10, 5, 15];
+        let [root_val, left_val, right_val] = node_values;
+        let tree = node_values
+            .to_vec()
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         let root = tree
-            .search(&10)
+            .search(&root_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| color_node.color());
 
         let left = tree
-            .search(&5)
+            .search(&left_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| color_node.color());
 
         let right = tree
-            .search(&15)
+            .search(&right_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| color_node.color());
 
@@ -641,36 +640,38 @@ mod tests {
         assert_eq!(Some(Color::Red), right);
     }
 
-    #[ignore = "Repainting looks completely wrong."]
     #[test]
     fn should_recolor_node_if_two_red_nodes_occur() {
-        let tree = vec![15, 10, 20, 5]
+        let node_values = [15, 10, 20, 5];
+        let [grandparent_val, parent_val, uncle_val, child_val] = node_values;
+        let tree = node_values
+            .to_vec()
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         let child = tree
-            .search(&5)
+            .search(&child_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
+            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
         let parent = tree
-            .search(&10)
+            .search(&parent_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
+            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
         let uncle = tree
-            .search(&5)
+            .search(&uncle_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
+            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
         let grandparent = tree
-            .search(&15)
+            .search(&grandparent_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
+            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
-        assert_eq!(Some(Color::Black), child);
-        assert_eq!(Some(Color::Red), parent);
-        assert_eq!(Some(Color::Red), uncle);
-        assert_eq!(Some(Color::Black), grandparent);
+        assert_eq!(Some((Color::Red, child_val)), child);
+        assert_eq!(Some((Color::Black, parent_val)), parent);
+        assert_eq!(Some((Color::Black, uncle_val)), uncle);
+        assert_eq!(Some((Color::Red, grandparent_val)), grandparent);
     }
 }
