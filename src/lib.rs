@@ -416,7 +416,7 @@ where
                 Rebalance::RightRight(_) => todo!(),
                 Rebalance::RightLeft(_) => todo!(),
                 Rebalance::Recolor(parent_id, uncle_id) => {
-                    next_step = self.recolor(parent_id, uncle_id)
+                    next_step = self.recolor_mut(parent_id, uncle_id)
                 }
                 Rebalance::Continue(next) => next_step = self.rebalance_step_mut(next),
             }
@@ -427,30 +427,96 @@ where
     /// occurs, a `Some(NodeId)` is returned, where the `NodeId` represents
     /// the parent of the starting node to continue the recolor recursively up.
     fn rebalance_step_mut(&mut self, node_id: NodeId) -> Option<Rebalance> {
-        self.get(node_id)
-            .and_then(|base_color_node| {
-                // if the base node is not root and it's parent is red, continue.
-                self.get_parent(base_color_node.id())
-                    // base node is not root.
-                    .and_then(|parent_color_node| match parent_color_node.color() {
-                        Color::Red => Some(parent_color_node.id()),
-                        Color::Black => None,
-                    })
-                    // base node is not root and parent is red.
-                    .and_then(|parent_id| {
-                        self.get_sibling(parent_id).and_then(|sibling_color_node| {
-                            match sibling_color_node.color() {
-                                Color::Red => Some((parent_id, sibling_color_node.id())),
-                                Color::Black => None,
+        self.get(node_id).and_then(|base_color_node| {
+            // if the base node is not root and it's parent is red, continue.
+            self.get_parent(base_color_node.id())
+                // base node is not root.
+                .and_then(|parent_color_node| {
+                    match parent_color_node.color() {
+                        Color::Red => {
+                            self.get_sibling(parent_color_node.id()).and_then(
+                                |sibling_color_node| {
+                                    match sibling_color_node.color() {
+                                        Color::Red => {
+                                            // recolor the node.
+                                            Some(Rebalance::Recolor(
+                                                parent_color_node.id(),
+                                                sibling_color_node.id(),
+                                            ))
+                                        }
+                                        Color::Black => None,
+                                    }
+                                },
+                            )
+                        }
+                        Color::Black => {
+                            // These are safe to unwrap. We can
+                            // assert that there is a child and parent by
+                            // previous checks.
+                            match (
+                                self.get_direction_of_node(parent_color_node.id()),
+                                self.get_direction_of_node(node_id).unwrap(),
+                            ) {
+                                // It's not a rotation situation if there is
+                                // no grandparent. So short-circuit.
+                                (None, _) => None,
+                                (Some(Direction::Left), Direction::Left) => {
+                                    Some(Rebalance::LeftLeft(node_id))
+                                }
+                                (Some(Direction::Left), Direction::Right) => {
+                                    Some(Rebalance::LeftRight(node_id))
+                                }
+                                (Some(Direction::Right), Direction::Left) => {
+                                    Some(Rebalance::RightLeft(node_id))
+                                }
+                                (Some(Direction::Right), Direction::Right) => {
+                                    Some(Rebalance::RightRight(node_id))
+                                }
                             }
+                        }
+                    }
+                })
+        })
+    }
+    /// Rotates left from a root node, returning the new root NodeId.
+    fn rotate_left_mut(&mut self, node_id: NodeId) -> Option<NodeId> {
+        let new_left_node_id = node_id;
+        self.get(node_id)
+            .and_then(|color_node| color_node.as_inner().right)
+            .and_then(|new_parent_id| {
+                // move new children under parent.
+                self.get_mut(new_parent_id)
+                    .map(|new_parent_color_node| {
+                        let new_child_right_node_id = new_parent_color_node.as_inner().left;
+                        new_parent_color_node.as_inner_mut().left = Some(node_id);
+
+                        (new_parent_color_node.id(), new_child_right_node_id)
+                        // assign rotated ids to child
+                    })
+                    .and_then(|(new_parent_id, optional_new_right_node_id)| {
+                        self.get_mut(new_left_node_id).map(|new_left_color_node| {
+                            new_left_color_node.as_inner_mut().parent = Some(new_parent_id);
+                            new_left_color_node.as_inner_mut().right = optional_new_right_node_id;
+                            (new_parent_id, optional_new_right_node_id)
                         })
                     })
+                    .map(|(new_parent_id, optional_new_right_node_id)| {
+                        optional_new_right_node_id.map(|new_right_node_id| {
+                            self.get_mut(new_right_node_id).map(|new_right_color_node| {
+                                new_right_color_node.as_inner_mut().parent =
+                                    Some(new_right_node_id);
+                            })
+                        });
+                        new_parent_id
+                    })
             })
-            // base node is not root and both parent and uncle are red.
-            .and_then(|(parent_id, uncle_id)| self.recolor(parent_id, uncle_id))
     }
 
-    fn recolor(&mut self, parent_id: NodeId, uncle_id: NodeId) -> Option<Rebalance> {
+    fn rotate_right_mut(&mut self, node_id: NodeId) -> Option<Rebalance> {
+        todo!()
+    }
+
+    fn recolor_mut(&mut self, parent_id: NodeId, uncle_id: NodeId) -> Option<Rebalance> {
         // flip parent color
         let _ = self
             .get_mut(parent_id)
@@ -481,6 +547,15 @@ where
                 .parent
                 .and_then(|parent_id| self.get(parent_id))
         })
+    }
+
+    /// Retrieves a the parent of a Node, Optionally returning a mutable
+    /// reference to the parent Node if it exists.
+    pub fn get_parent_mut<'a>(&'a mut self, id: NodeId) -> Option<&'a mut ColorNode<V>> {
+        match self.get_parent(id).map(|parent_node| parent_node.id()) {
+            Some(parent_id) => self.get_mut(parent_id),
+            None => todo!(),
+        }
     }
 
     /// Retrieves the parent of a Node's parent, Optionally returning a
@@ -572,6 +647,7 @@ mod tests {
         assert_eq!(SearchResult::Hit(NodeId::from(1)), tree.search(&5));
     }
 
+    #[ignore = "Ignored until rotation cases is implemented."]
     #[test]
     fn should_get_correct_relationships_for_nodes() {
         let child = 5;
@@ -680,5 +756,17 @@ mod tests {
         assert_eq!(Some((Color::Black, parent_val)), parent);
         assert_eq!(Some((Color::Black, uncle_val)), uncle);
         assert_eq!(Some((Color::Red, grandparent_val)), grandparent);
+    }
+
+    #[test]
+    fn should_return_correct_parent_relationships_on_left_rotation() {
+        let mut tree = vec![5, 10, 15]
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        // rotate the root of the tree left
+        tree.rotate_left_mut(tree.root.unwrap());
+
+        println!("{:#?}", tree);
     }
 }
