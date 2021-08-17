@@ -482,12 +482,19 @@ where
     fn rotate_left_mut(&mut self, node_id: NodeId) -> Option<NodeId> {
         let new_left_node_id = node_id;
         self.get(node_id)
-            .and_then(|color_node| color_node.as_inner().right)
-            .and_then(|new_parent_id| {
+            .and_then(|color_node| {
+                color_node
+                    .as_inner()
+                    .right
+                    .map(|new_parent_id| (color_node.as_inner().parent, new_parent_id))
+            })
+            // unpack the parent
+            .and_then(|(upstream_parent_id, new_parent_id)| {
                 // move new children under parent.
                 self.get_mut(new_parent_id)
                     .map(|new_parent_color_node| {
                         let new_child_right_node_id = new_parent_color_node.as_inner().left;
+                        new_parent_color_node.as_inner_mut().parent = upstream_parent_id;
                         new_parent_color_node.as_inner_mut().left = Some(node_id);
 
                         (new_parent_color_node.id(), new_child_right_node_id)
@@ -512,8 +519,43 @@ where
             })
     }
 
-    fn rotate_right_mut(&mut self, node_id: NodeId) -> Option<Rebalance> {
-        todo!()
+    /// Rotates right from a root node, returning the new root node id.
+    fn rotate_right_mut(&mut self, node_id: NodeId) -> Option<NodeId> {
+        let new_left_node_id = node_id;
+        self.get(node_id)
+            .and_then(|color_node| {
+                color_node
+                    .as_inner()
+                    .left
+                    .map(|new_parent_id| (color_node.as_inner().parent, new_parent_id))
+            })
+            .and_then(|(upstream_parent_id, new_parent_id)| {
+                // move new children under parent.
+                self.get_mut(new_parent_id)
+                    .map(|new_parent_color_node| {
+                        let new_child_left_node_id = new_parent_color_node.as_inner().right;
+                        new_parent_color_node.as_inner_mut().parent = upstream_parent_id;
+                        new_parent_color_node.as_inner_mut().right = Some(node_id);
+
+                        (new_parent_color_node.id(), new_child_left_node_id)
+                        // assign rotated ids to child
+                    })
+                    .and_then(|(new_parent_id, optional_new_left_node_id)| {
+                        self.get_mut(new_left_node_id).map(|new_left_color_node| {
+                            new_left_color_node.as_inner_mut().parent = Some(new_parent_id);
+                            new_left_color_node.as_inner_mut().left = optional_new_left_node_id;
+                            (new_parent_id, optional_new_left_node_id)
+                        })
+                    })
+                    .map(|(new_parent_id, optional_new_left_node_id)| {
+                        optional_new_left_node_id.map(|new_left_node_id| {
+                            self.get_mut(new_left_node_id).map(|new_left_color_node| {
+                                new_left_color_node.as_inner_mut().parent = Some(new_left_node_id);
+                            })
+                        });
+                        new_parent_id
+                    })
+            })
     }
 
     fn recolor_mut(&mut self, parent_id: NodeId, uncle_id: NodeId) -> Option<Rebalance> {
@@ -760,13 +802,53 @@ mod tests {
 
     #[test]
     fn should_return_correct_parent_relationships_on_left_rotation() {
-        let mut tree = vec![5, 10, 15]
+        let mut tree = vec![10, 5, 15]
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         // rotate the root of the tree left
         tree.rotate_left_mut(tree.root.unwrap());
 
-        println!("{:#?}", tree);
+        let ten = tree.nodes[0].as_inner();
+        let five = tree.nodes[1].as_inner();
+        let fifteen = tree.nodes[2].as_inner();
+
+        // five's new parent should be the 10 node.
+        assert_eq!(Some(NodeId::from(0)), five.parent);
+
+        // ten's new parent should be the fifteen node and new child should be
+        // 5.
+        assert_eq!(Some(NodeId::from(2)), ten.parent);
+        assert_eq!(Some(NodeId::from(1)), ten.left);
+
+        // fifteen is root and is the parent of 10 node.
+        assert!(fifteen.is_root());
+        assert_eq!(Some(NodeId::from(0)), fifteen.left);
+    }
+
+    #[test]
+    fn should_return_correct_parent_relationships_on_right_rotation() {
+        let mut tree = vec![10, 5, 15]
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        // rotate the root of the tree right
+        tree.rotate_right_mut(tree.root.unwrap());
+
+        let ten = tree.nodes[0].as_inner();
+        let five = tree.nodes[1].as_inner();
+        let fifteen = tree.nodes[2].as_inner();
+
+        // five is root and is the parent of 10 node.
+        assert!(five.is_root());
+        assert_eq!(Some(NodeId::from(0)), five.right);
+
+        // 10's new parent should be the 5 node and new child should be
+        // 15.
+        assert_eq!(Some(NodeId::from(1)), ten.parent);
+        assert_eq!(Some(NodeId::from(2)), ten.right);
+
+        // fifteens's new parent should be the 10 node.
+        assert_eq!(Some(NodeId::from(0)), fifteen.parent);
     }
 }
