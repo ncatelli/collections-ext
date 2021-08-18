@@ -730,6 +730,95 @@ where
                 _ => None,
             })
     }
+
+    pub fn traverse_in_order<'a>(&'a self) -> InOrder<'a, V> {
+        InOrder::new(self)
+    }
+
+    pub fn iter<'a>(&'a self) -> InOrder<'a, V> {
+        InOrder::new(self)
+    }
+}
+
+pub struct InOrder<'a, V> {
+    inner: &'a RedBlackTree<V>,
+    left_most_node: Option<NodeId>,
+    stack: Vec<NodeId>,
+}
+
+impl<'a, V> InOrder<'a, V>
+where
+    V: PartialEq + PartialOrd + Default,
+{
+    pub fn new(inner: &'a RedBlackTree<V>) -> Self {
+        Self {
+            inner,
+            left_most_node: inner.root,
+            stack: Vec::new(),
+        }
+    }
+}
+
+impl<'a, V> Iterator for InOrder<'a, V>
+where
+    V: PartialEq + PartialOrd + Default,
+{
+    type Item = &'a V;
+    /*
+    # Set current to root of binary tree
+    current = root
+    stack = [] # initialize stack
+    done = 0
+
+    while True:
+
+        # Reach the left most Node of the current Node
+        if current is not None:
+
+            # Place pointer to a tree node on the stack
+            # before traversing the node's left subtree
+            stack.append(current)
+
+            current = current.left
+
+
+        # BackTrack from the empty subtree and visit the Node
+        # at the top of the stack; however, if the stack is
+        # empty you are done
+        elif(stack):
+            current = stack.pop()
+            print(current.data, end=" ") # Python 3 printing
+
+            # We have visited the node and its left
+            # subtree. Now, it's right subtree's turn
+            current = current.right
+
+        else:
+            break
+    */
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(id) = self.left_most_node {
+            self.stack.push(id);
+
+            self.left_most_node = self
+                .inner
+                .get(id)
+                .and_then(|color_node| color_node.as_inner().left);
+        }
+
+        if let Some(up_from_current) = self.stack.pop() {
+            self.left_most_node = self
+                .inner
+                .get(up_from_current)
+                .and_then(|color_node| color_node.as_inner().right);
+
+            self.inner
+                .get(up_from_current)
+                .map(|color_node| &color_node.as_inner().inner)
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -879,5 +968,19 @@ mod tests {
 
         // fifteens's new parent should be the 10 node.
         assert_eq!(Some(NodeId::from(0)), fifteen.parent);
+    }
+
+    #[test]
+    fn should_traverse_in_order() {
+        let tree = vec![10, 5, 15]
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        let mut i = tree.traverse_in_order();
+
+        assert_eq!(Some(&5), i.next());
+        assert_eq!(Some(&10), i.next());
+        assert_eq!(Some(&15), i.next());
+        assert_eq!(None, i.next());
     }
 }
