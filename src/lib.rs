@@ -502,8 +502,6 @@ where
     ///     \       \
     ///      y       y
     fn rotate_left_mut(&mut self, x_id: NodeId) -> Option<NodeId> {
-        use std::mem;
-
         // if z or x aren't set return None
         let z_id = self
             .get(x_id)
@@ -511,35 +509,36 @@ where
         let y_id = self
             .get(z_id)
             .and_then(|z_color_node| z_color_node.as_inner().left);
-        let z_id = self
-            .get(x_id)
-            .and_then(|x_color_node| x_color_node.as_inner().right)?;
 
         let upstream_parent_id = self
             .get_parent(x_id)
             .and_then(|x_node| x_node.as_inner().parent);
 
+        // Switch x with z on the upstream parent.
         upstream_parent_id.and_then(|id| {
             // safe to unwrap
             let upstream_direction = self.get_direction_of_node(x_id).unwrap();
-            self.get_mut(id).and_then(|node| match upstream_direction {
-                Direction::Left => mem::replace(&mut node.as_inner_mut().left, Some(z_id)),
-                Direction::Right => mem::replace(&mut node.as_inner_mut().right, Some(z_id)),
+            self.get_mut(id).map(|node| match upstream_direction {
+                Direction::Left => node.as_inner_mut().left = Some(z_id),
+                Direction::Right => node.as_inner_mut().right = Some(z_id),
             })
         });
 
+        // Set the parent of z to the upstream parent and make x a child of z.
         let _ = self.get_mut(z_id).map(|z_node| {
             let z_inner = z_node.as_inner_mut();
             z_inner.parent = upstream_parent_id;
             z_inner.left = Some(x_id);
         });
 
+        // Set the parent of x to z and the right node of x to y if it exists.
         let _ = self.get_mut(x_id).map(|x_node| {
             let x_inner = x_node.as_inner_mut();
             x_inner.parent = Some(z_id);
             x_inner.right = y_id;
         });
 
+        // if y exists, set its parent to x.
         y_id.and_then(|id| {
             self.get_mut(id).map(|y_node| {
                 y_node.as_inner_mut().parent = Some(x_id);
@@ -549,44 +548,57 @@ where
         Some(z_id)
     }
 
-    /// Rotates right from a root node, returning the new root node id.
-    fn rotate_right_mut(&mut self, node_id: NodeId) -> Option<NodeId> {
-        let new_left_node_id = node_id;
+    /// Rotates right from a root node, returning the new root NodeId.
+    ///      x  z    
+    ///     /     \
+    ///    z --->   x
+    ///   /        /
+    ///  y        y
+    fn rotate_right_mut(&mut self, x_id: NodeId) -> Option<NodeId> {
+        // if z or x aren't set return None
+        let z_id = self
+            .get(x_id)
+            .and_then(|x_color_node| x_color_node.as_inner().left)?;
+        let y_id = self
+            .get(z_id)
+            .and_then(|z_color_node| z_color_node.as_inner().right);
 
-        self.get(node_id)
-            .and_then(|color_node| {
-                color_node
-                    .as_inner()
-                    .left
-                    .map(|new_parent_id| (color_node.as_inner().parent, new_parent_id))
-            })
-            .and_then(|(upstream_parent_id, new_parent_id)| {
-                // move new children under parent.
-                self.get_mut(new_parent_id)
-                    .map(|new_parent_color_node| {
-                        let new_child_left_node_id = new_parent_color_node.as_inner().right;
-                        new_parent_color_node.as_inner_mut().parent = upstream_parent_id;
-                        new_parent_color_node.as_inner_mut().right = Some(node_id);
+        let upstream_parent_id = self
+            .get_parent(x_id)
+            .and_then(|x_node| x_node.as_inner().parent);
 
-                        (new_parent_color_node.id(), new_child_left_node_id)
-                        // assign rotated ids to child
-                    })
-                    .and_then(|(new_parent_id, optional_new_left_node_id)| {
-                        self.get_mut(new_left_node_id).map(|new_left_color_node| {
-                            new_left_color_node.as_inner_mut().parent = Some(new_parent_id);
-                            new_left_color_node.as_inner_mut().left = optional_new_left_node_id;
-                            (new_parent_id, optional_new_left_node_id)
-                        })
-                    })
-                    .map(|(new_parent_id, optional_new_left_node_id)| {
-                        optional_new_left_node_id.map(|new_left_node_id| {
-                            self.get_mut(new_left_node_id).map(|new_left_color_node| {
-                                new_left_color_node.as_inner_mut().parent = Some(new_left_node_id);
-                            })
-                        });
-                        new_parent_id
-                    })
+        // Switch x with z on the upstream parent.
+        upstream_parent_id.and_then(|id| {
+            // safe to unwrap
+            let upstream_direction = self.get_direction_of_node(x_id).unwrap();
+            self.get_mut(id).map(|node| match upstream_direction {
+                Direction::Left => node.as_inner_mut().left = Some(z_id),
+                Direction::Right => node.as_inner_mut().right = Some(z_id),
             })
+        });
+
+        // Set the parent of z to the upstream parent and make x a child of z.
+        let _ = self.get_mut(z_id).map(|z_node| {
+            let z_inner = z_node.as_inner_mut();
+            z_inner.parent = upstream_parent_id;
+            z_inner.right = Some(x_id);
+        });
+
+        // Set the parent of x to z and the left node of x to y if it exists.
+        let _ = self.get_mut(x_id).map(|x_node| {
+            let x_inner = x_node.as_inner_mut();
+            x_inner.parent = Some(z_id);
+            x_inner.left = y_id;
+        });
+
+        // if y exists, set its parent to x.
+        y_id.and_then(|id| {
+            self.get_mut(id).map(|y_node| {
+                y_node.as_inner_mut().parent = Some(x_id);
+            })
+        });
+
+        Some(z_id)
     }
 
     fn recolor_mut(&mut self, parent_id: NodeId, uncle_id: NodeId) -> Option<Rebalance> {
