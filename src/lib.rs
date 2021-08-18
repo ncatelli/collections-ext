@@ -442,57 +442,44 @@ where
     /// Rebalance a tree starting at node_id and recursing up. If a recolor
     /// occurs, a `Some(NodeId)` is returned, where the `NodeId` represents
     /// the parent of the starting node to continue the recolor recursively up.
-    fn rebalance_step_mut(&mut self, node_id: NodeId) -> Option<Rebalance> {
-        self.get(node_id).and_then(|base_color_node| {
-            // if the base node is not root and it's parent is red, continue.
-            self.get_parent(base_color_node.id())
-                // base node is not root.
-                .and_then(|parent_color_node| {
-                    match parent_color_node.color() {
-                        Color::Red => {
-                            self.get_sibling(parent_color_node.id()).and_then(
-                                |sibling_color_node| {
-                                    match sibling_color_node.color() {
-                                        Color::Red => {
-                                            // recolor the node.
-                                            Some(Rebalance::Recolor(
-                                                parent_color_node.id(),
-                                                sibling_color_node.id(),
-                                            ))
-                                        }
-                                        Color::Black => None,
-                                    }
-                                },
-                            )
-                        }
-                        Color::Black => {
-                            // These are safe to unwrap. We can
-                            // assert that there is a child and parent by
-                            // previous checks.
-                            match (
-                                self.get_direction_of_node(parent_color_node.id()),
-                                self.get_direction_of_node(node_id).unwrap(),
-                            ) {
-                                // It's not a rotation situation if there is
-                                // no grandparent. So short-circuit.
-                                (None, _) => None,
-                                (Some(Direction::Left), Direction::Left) => {
-                                    Some(Rebalance::LeftLeft)
-                                }
-                                (Some(Direction::Left), Direction::Right) => {
-                                    Some(Rebalance::LeftRight)
-                                }
-                                (Some(Direction::Right), Direction::Left) => {
-                                    Some(Rebalance::RightLeft)
-                                }
-                                (Some(Direction::Right), Direction::Right) => {
-                                    Some(Rebalance::RightRight)
-                                }
-                            }
-                        }
+    fn rebalance_step_mut(&mut self, base_node_id: NodeId) -> Option<Rebalance> {
+        // short-circuit to none if the base is root.
+        let (parent_id, parent_color) = self
+            .get_parent(base_node_id)
+            .map(|parent_color_node| (parent_color_node.id(), parent_color_node.color()))?;
+        let (optional_uncle_id, uncle_color) = self
+            .get_uncle(base_node_id)
+            .map(|uncle_color_node| (Some(uncle_color_node.id()), uncle_color_node.color()))
+            .unwrap_or_else(|| (None, Color::Black));
+
+        match parent_color {
+            Color::Red => {
+                match (optional_uncle_id, uncle_color) {
+                    (Some(uncle_id), Color::Red) => {
+                        // recolor the node.
+                        Some(Rebalance::Recolor(parent_id, uncle_id))
                     }
-                })
-        })
+                    _ => None,
+                }
+            }
+            Color::Black => {
+                // These are safe to unwrap. We can
+                // assert that there is a child and parent by
+                // previous checks.
+                match (
+                    self.get_direction_of_node(parent_id),
+                    self.get_direction_of_node(base_node_id).unwrap(),
+                ) {
+                    // It's not a rotation situation if there is
+                    // no grandparent. So short-circuit.
+                    (None, _) => None,
+                    (Some(Direction::Left), Direction::Left) => Some(Rebalance::LeftLeft),
+                    (Some(Direction::Left), Direction::Right) => Some(Rebalance::LeftRight),
+                    (Some(Direction::Right), Direction::Left) => Some(Rebalance::RightLeft),
+                    (Some(Direction::Right), Direction::Right) => Some(Rebalance::RightRight),
+                }
+            }
+        }
     }
 
     /// Rotates left from a root node, returning the new root NodeId.
