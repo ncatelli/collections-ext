@@ -454,12 +454,10 @@ where
 
         match parent_color {
             Color::Red => {
-                match (optional_uncle_id, uncle_color) {
-                    (Some(uncle_id), Color::Red) => {
-                        // recolor the node.
-                        Some(Rebalance::Recolor(parent_id, uncle_id))
-                    }
-                    _ => None,
+                if let (Some(uncle_id), Color::Red) = (optional_uncle_id, uncle_color) {
+                    Some(Rebalance::Recolor(parent_id, uncle_id))
+                } else {
+                    None
                 }
             }
             Color::Black => {
