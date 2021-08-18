@@ -502,42 +502,51 @@ where
     ///     \       \
     ///      y       y
     fn rotate_left_mut(&mut self, x_id: NodeId) -> Option<NodeId> {
-        self.get(x_id)
-            .and_then(|color_node| {
-                color_node
-                    .as_inner()
-                    .right
-                    .map(|new_parent_id| (color_node.as_inner().parent, new_parent_id))
-            })
-            // unpack the parent
-            .and_then(|(upstream_parent_id, new_parent_id)| {
-                // move new children under parent.
-                self.get_mut(new_parent_id)
-                    .map(|new_parent_color_node| {
-                        let new_child_right_node_id = new_parent_color_node.as_inner().left;
-                        new_parent_color_node.as_inner_mut().parent = upstream_parent_id;
-                        new_parent_color_node.as_inner_mut().left = Some(x_id);
+        use std::mem;
 
-                        (new_parent_color_node.id(), new_child_right_node_id)
-                        // assign rotated ids to child
-                    })
-                    .and_then(|(new_parent_id, optional_new_right_node_id)| {
-                        self.get_mut(x_id).map(|new_left_color_node| {
-                            new_left_color_node.as_inner_mut().parent = Some(new_parent_id);
-                            new_left_color_node.as_inner_mut().right = optional_new_right_node_id;
-                            (new_parent_id, optional_new_right_node_id)
-                        })
-                    })
-                    .map(|(new_parent_id, optional_new_right_node_id)| {
-                        optional_new_right_node_id.map(|new_right_node_id| {
-                            self.get_mut(new_right_node_id).map(|new_right_color_node| {
-                                new_right_color_node.as_inner_mut().parent =
-                                    Some(new_right_node_id);
-                            })
-                        });
-                        new_parent_id
-                    })
+        // if z or x aren't set return None
+        let z_id = self
+            .get(x_id)
+            .and_then(|x_color_node| x_color_node.as_inner().right)?;
+        let y_id = self
+            .get(z_id)
+            .and_then(|z_color_node| z_color_node.as_inner().left);
+        let z_id = self
+            .get(x_id)
+            .and_then(|x_color_node| x_color_node.as_inner().right)?;
+
+        let upstream_parent_id = self
+            .get_parent(x_id)
+            .and_then(|x_node| x_node.as_inner().parent);
+
+        upstream_parent_id.and_then(|id| {
+            // safe to unwrap
+            let upstream_direction = self.get_direction_of_node(x_id).unwrap();
+            self.get_mut(id).and_then(|node| match upstream_direction {
+                Direction::Left => mem::replace(&mut node.as_inner_mut().left, Some(z_id)),
+                Direction::Right => mem::replace(&mut node.as_inner_mut().right, Some(z_id)),
             })
+        });
+
+        let _ = self.get_mut(z_id).map(|z_node| {
+            let z_inner = z_node.as_inner_mut();
+            z_inner.parent = upstream_parent_id;
+            z_inner.left = Some(x_id);
+        });
+
+        let _ = self.get_mut(x_id).map(|x_node| {
+            let x_inner = x_node.as_inner_mut();
+            x_inner.parent = Some(z_id);
+            x_inner.right = y_id;
+        });
+
+        y_id.and_then(|id| {
+            self.get_mut(id).map(|y_node| {
+                y_node.as_inner_mut().parent = Some(x_id);
+            })
+        });
+
+        Some(z_id)
     }
 
     /// Rotates right from a root node, returning the new root node id.
@@ -883,6 +892,8 @@ mod tests {
 
         // rotate the root of the tree left
         tree.rotate_left_mut(tree.root.unwrap());
+
+        print!("{:?}", &tree);
 
         let ten = tree.nodes[0].as_inner();
         let five = tree.nodes[1].as_inner();
