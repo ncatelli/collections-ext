@@ -452,30 +452,27 @@ where
             .map(|uncle_color_node| (Some(uncle_color_node.id()), uncle_color_node.color()))
             .unwrap_or_else(|| (None, Color::Black));
 
-        match parent_color {
-            Color::Red => {
-                if let (Some(uncle_id), Color::Red) = (optional_uncle_id, uncle_color) {
-                    Some(Rebalance::Recolor(parent_id, uncle_id))
-                } else {
-                    None
-                }
+        if parent_color == Color::Red {
+            if let (Some(uncle_id), Color::Red) = (optional_uncle_id, uncle_color) {
+                Some(Rebalance::Recolor(parent_id, uncle_id))
+            } else {
+                None
             }
-            Color::Black => {
-                // These are safe to unwrap. We can
-                // assert that there is a child and parent by
-                // previous checks.
-                match (
-                    self.get_direction_of_node(parent_id),
-                    self.get_direction_of_node(base_node_id).unwrap(),
-                ) {
-                    // It's not a rotation situation if there is
-                    // no grandparent. So short-circuit.
-                    (None, _) => None,
-                    (Some(Direction::Left), Direction::Left) => Some(Rebalance::LeftLeft),
-                    (Some(Direction::Left), Direction::Right) => Some(Rebalance::LeftRight),
-                    (Some(Direction::Right), Direction::Left) => Some(Rebalance::RightLeft),
-                    (Some(Direction::Right), Direction::Right) => Some(Rebalance::RightRight),
-                }
+        } else {
+            // These are safe to unwrap. We can
+            // assert that there is a child and parent by
+            // previous checks.
+            match (
+                self.get_direction_of_node(parent_id),
+                self.get_direction_of_node(base_node_id).unwrap(),
+            ) {
+                // It's not a rotation situation if there is
+                // no grandparent. So short-circuit.
+                (None, _) => None,
+                (Some(Direction::Left), Direction::Left) => Some(Rebalance::LeftLeft),
+                (Some(Direction::Left), Direction::Right) => Some(Rebalance::LeftRight),
+                (Some(Direction::Right), Direction::Left) => Some(Rebalance::RightLeft),
+                (Some(Direction::Right), Direction::Right) => Some(Rebalance::RightRight),
             }
         }
     }
