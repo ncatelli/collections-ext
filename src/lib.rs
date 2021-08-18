@@ -645,29 +645,6 @@ where
         self.handle_rr_mut(node_id)
     }
 
-    /*
-    fn handle_rl_mut(&mut self) {
-        let _ = self
-            .root
-            .and_then(|original_root_id| {
-                self.get(original_root_id).and_then(|original_root_node| {
-                    original_root_node
-                        .as_inner()
-                        .right
-                        .map(|right_node_id| (original_root_id, right_node_id))
-                })
-            })
-            .and_then(|(original_root_node_id, right_node_id)| {
-                let new_branch_root = self.rotate_right_mut(right_node_id);
-                self.get_mut(original_root_node_id).map(|root_color_node| {
-                    root_color_node.as_inner_mut().right = new_branch_root;
-                    root_color_node.id()
-                })
-            })
-            .map(|_| self.handle_rr_mut());
-    }
-    */
-
     /// Retrieves a the parent of a Node, Optionally returning a reference to
     /// the parent Node if it exists.
     pub fn get_parent(&self, id: NodeId) -> Option<&ColorNode<V>> {
