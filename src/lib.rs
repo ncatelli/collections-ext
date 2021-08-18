@@ -182,8 +182,8 @@ enum Rebalance {
     LeftRight,
     RightRight,
     RightLeft,
-    /// contains the parent, and uncle id of a node for recoloring.
-    Recolor(NodeId, NodeId),
+    /// Contains the next base node for recoloring.
+    Recolor(NodeId),
     Continue(NodeId),
 }
 
@@ -431,9 +431,7 @@ where
                     self.handle_rl_mut();
                     next_step = None;
                 }
-                Rebalance::Recolor(parent_id, uncle_id) => {
-                    next_step = self.recolor_mut(parent_id, uncle_id)
-                }
+                Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id),
                 Rebalance::Continue(next) => next_step = self.rebalance_step_mut(next),
             }
         }
@@ -454,23 +452,23 @@ where
 
         if parent_color == Color::Red {
             if let (Some(uncle_id), Color::Red) = (optional_uncle_id, uncle_color) {
-                Some(Rebalance::Recolor(parent_id, uncle_id))
+                Some(Rebalance::Recolor(base_node_id))
             } else {
-                None
+                let base_direction = self.get_direction_of_node(base_node_id);
+                let optional_parent_direction = self.get_direction_of_node(parent_id);
+
+                match (optional_parent_direction, base_direction) {
+                    // It's not a rotation situation if there is
+                    // no grandparent. So short-circuit.
+                    (None, _) | (_, None) => None,
+                    (Some(Direction::Left), Some(Direction::Left)) => Some(Rebalance::LeftLeft),
+                    (Some(Direction::Left), Some(Direction::Right)) => Some(Rebalance::LeftRight),
+                    (Some(Direction::Right), Some(Direction::Left)) => Some(Rebalance::RightLeft),
+                    (Some(Direction::Right), Some(Direction::Right)) => Some(Rebalance::RightRight),
+                }
             }
         } else {
-            let base_direction = self.get_direction_of_node(base_node_id);
-            let optional_parent_direction = self.get_direction_of_node(parent_id);
-
-            match (optional_parent_direction, base_direction) {
-                // It's not a rotation situation if there is
-                // no grandparent. So short-circuit.
-                (None, _) | (_, None) => None,
-                (Some(Direction::Left), Some(Direction::Left)) => Some(Rebalance::LeftLeft),
-                (Some(Direction::Left), Some(Direction::Right)) => Some(Rebalance::LeftRight),
-                (Some(Direction::Right), Some(Direction::Left)) => Some(Rebalance::RightLeft),
-                (Some(Direction::Right), Some(Direction::Right)) => Some(Rebalance::RightRight),
-            }
+            None
         }
     }
 
@@ -553,27 +551,31 @@ where
         Some(z_id)
     }
 
-    fn recolor_mut(&mut self, parent_id: NodeId, uncle_id: NodeId) -> Option<Rebalance> {
-        // flip parent color
-        let _ = self
-            .get_mut(parent_id)
-            .map(|parent_node| parent_node.flip_color_mut());
-        // flip uncle color
-        let _ = self
-            .get_mut(uncle_id)
-            .map(|uncle_node| uncle_node.flip_color_mut());
+    #[allow(clippy::redundant_closure)]
+    fn recolor_mut(&mut self, base_id: NodeId) -> Option<Rebalance> {
+        // set parent to black and return the id
+        let parent_id = self.get_parent_mut(base_id).map(|parent_node| {
+            parent_node.set_color_mut(Color::Black);
+            parent_node.id()
+        })?;
+
+        // set uncle to black and return its id.
+        let uncle_id = self.get_uncle(base_id).map(|uncle_node| uncle_node.id())?;
+        self.get_mut(uncle_id).map(|uncle_node| {
+            uncle_node.set_color_mut(Color::Black);
+            uncle_node.id()
+        })?;
 
         // if grandparent is black, flip to red and recurse up.
-        self.get_parent(parent_id)
-            .map(|grandparent_color_node| grandparent_color_node.id())
-            .and_then(|grandparent_id| {
-                self.get_mut(grandparent_id)
-                    .map(|grandparent_node| match grandparent_node.color() {
-                        Color::Red => (),
-                        Color::Black => grandparent_node.flip_color_mut(),
-                    })
-                    .map(|_| Rebalance::Continue(grandparent_id))
+        self.get_parent_mut(parent_id)
+            .and_then(|grandparent_node| match grandparent_node.color() {
+                Color::Red => None,
+                Color::Black => {
+                    grandparent_node.set_color_mut(Color::Red);
+                    Some(grandparent_node.id())
+                }
             })
+            .map(|grandparent_id| Rebalance::Recolor(grandparent_id))
     }
 
     fn handle_ll_mut(&mut self) {
@@ -679,7 +681,7 @@ where
     pub fn get_parent_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
         match self.get_parent(id).map(|parent_node| parent_node.id()) {
             Some(parent_id) => self.get_mut(parent_id),
-            None => todo!(),
+            None => None,
         }
     }
 
@@ -856,8 +858,6 @@ mod tests {
 
         // rotate the root of the tree left
         tree.rotate_left_mut(tree.root.unwrap());
-
-        print!("{:?}", &tree);
 
         let ten = tree.nodes[0].as_inner();
         let five = tree.nodes[1].as_inner();
