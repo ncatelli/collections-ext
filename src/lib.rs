@@ -712,7 +712,7 @@ where
 
     /// Retrieves a the parent of a Node, Optionally returning a mutable
     /// reference to the parent Node if it exists.
-    pub fn get_parent_mut<'a>(&'a mut self, id: NodeId) -> Option<&'a mut ColorNode<V>> {
+    pub fn get_parent_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
         match self.get_parent(id).map(|parent_node| parent_node.id()) {
             Some(parent_id) => self.get_mut(parent_id),
             None => todo!(),
