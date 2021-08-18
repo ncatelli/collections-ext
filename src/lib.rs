@@ -552,7 +552,8 @@ where
             }
         });
 
-        // Set the parent of x to z and the left node of x to y if it exists.
+        // Set the parent of x to z and the inverse direction node of x to y if
+        // it exists.
         let _ = self.get_mut(x_id).map(|x_node| {
             let x_inner = x_node.as_inner_mut();
             x_inner.parent = Some(z_id);
