@@ -518,6 +518,7 @@ where
     /// Rotates a node by a passed direction
     fn rotate_mut(&mut self, x_id: NodeId, direction: Direction) -> Option<NodeId> {
         // if z or x aren't set return None
+        self.get(x_id)?;
         let z_id = self.get(x_id).and_then(|x_color_node| match direction {
             Direction::Left => x_color_node.as_inner().right,
             Direction::Right => x_color_node.as_inner().left,
