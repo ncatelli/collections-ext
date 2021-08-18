@@ -819,8 +819,8 @@ mod tests {
 
     #[test]
     fn should_recolor_node_if_two_red_nodes_occur() {
-        let node_values = [10, 15, 20, 5];
-        let [parent_val, grandparent_val, uncle_val, child_val] = node_values;
+        let node_values = [15, 20, 5, 10];
+        let [grandparent_val, uncle_val, child_val, parent_val] = node_values;
         let tree = node_values
             .to_vec()
             .into_iter()
@@ -846,10 +846,8 @@ mod tests {
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
-        println!("{:#?}", &tree);
-
-        assert_eq!(Some((Color::Red, child_val)), child);
-        assert_eq!(Some((Color::Black, parent_val)), parent);
+        assert_eq!(Some((Color::Black, child_val)), child);
+        assert_eq!(Some((Color::Red, parent_val)), parent);
         assert_eq!(Some((Color::Black, uncle_val)), uncle);
         assert_eq!(Some((Color::Red, grandparent_val)), grandparent);
     }
