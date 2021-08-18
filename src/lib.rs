@@ -15,11 +15,6 @@ impl NodeId {
     pub fn to_usize(self) -> usize {
         self.0
     }
-
-    /// Borrows the enclosuing usize value of the NodeId.
-    pub fn as_usize(&self) -> &usize {
-        &self.0
-    }
 }
 
 impl From<usize> for NodeId {
@@ -34,16 +29,16 @@ impl From<usize> for NodeId {
 #[derive(Default, Debug, Clone)]
 pub struct Node<V> {
     /// A unique identifier for the node
-    pub id: NodeId,
+    id: NodeId,
     /// An inner value stored in the tree.
-    pub inner: V,
+    inner: V,
     /// An optional parent node. A value of None signifies that this node is
     /// the root.
-    pub parent: Option<NodeId>,
+    parent: Option<NodeId>,
     /// An optional left-side direcitonaldescendant node.
-    pub left: Option<NodeId>,
+    left: Option<NodeId>,
     /// An optional right-side direcitonaldescendant node.
-    pub right: Option<NodeId>,
+    right: Option<NodeId>,
 }
 
 impl<V> Node<V> {
@@ -67,18 +62,6 @@ impl<V> Node<V> {
     /// node.
     pub fn is_root(&self) -> bool {
         self.parent.is_none()
-    }
-
-    /// Returns a boolean signifying if this node is a branch (has a parent
-    /// and atleast one child) node.
-    pub fn is_branch(&self) -> bool {
-        !(self.is_root() || self.is_leaf())
-    }
-
-    /// Returns a boolean signifying if this node is a leaf (has no children)
-    /// node.
-    pub fn is_leaf(&self) -> bool {
-        self.left.is_none() && self.right.is_none()
     }
 
     /// Returns the inner value of the Node.
@@ -206,7 +189,7 @@ enum Rebalance {
 
 /// SearchResult represents the results of a binary tree search.
 #[derive(Debug, PartialEq, Eq)]
-pub enum SearchResult {
+enum SearchResult {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
     Hit(NodeId),
@@ -220,7 +203,7 @@ pub enum SearchResult {
 impl SearchResult {
     /// Calls `f` if the self is `SearchResult::Hit` returning the result of
     /// `f` wrapped in `Some` otherwise `None` is returned.
-    pub fn hit_then<F, B>(self, f: F) -> Option<B>
+    fn hit_then<F, B>(self, f: F) -> Option<B>
     where
         F: Fn(NodeId) -> B,
     {
@@ -229,34 +212,22 @@ impl SearchResult {
             _ => None,
         }
     }
-
-    /// Calls `f` if the self is `SearchResult::Miss` returning the result of
-    /// `f` wrapped in `Some` otherwise `None` is returned.
-    pub fn miss_then<F, B>(self, f: F) -> Option<B>
-    where
-        F: Fn(NodeId) -> B,
-    {
-        match self {
-            SearchResult::Miss(node_id) => Some(f(node_id)),
-            _ => None,
-        }
-    }
 }
 
 /// Captures the state of a tree walk.
-enum WalkStep {
+enum ControlFlowState {
     /// Continue encloses the next node to check for a match in a binary walk.
     Continue(NodeId),
     /// Signifies the end node in walk and that the walk should stop.
-    Stop(NodeId),
+    Break(NodeId),
 }
 
-impl WalkStep {
-    /// Unpacks a `WalkStep::Stop` into an Option. Returning `None` if the
-    /// variant is not `Stop`.
-    fn stop(self) -> Option<NodeId> {
+impl ControlFlowState {
+    /// Unpacks a `ControlFlowState::Break` into an Option. Returning `None` if the
+    /// variant is not `Break`.
+    fn break_value(self) -> Option<NodeId> {
         match self {
-            WalkStep::Stop(inner) => Some(inner),
+            ControlFlowState::Break(inner) => Some(inner),
             _ => None,
         }
     }
@@ -291,6 +262,20 @@ where
     }
 }
 
+impl<V> std::ops::Index<NodeId> for RedBlackTree<V> {
+    type Output = ColorNode<V>;
+
+    fn index(&self, idx: NodeId) -> &Self::Output {
+        &self.nodes[idx.to_usize()]
+    }
+}
+
+impl<V> std::ops::IndexMut<NodeId> for RedBlackTree<V> {
+    fn index_mut(&mut self, idx: NodeId) -> &mut Self::Output {
+        &mut self.nodes[idx.to_usize()]
+    }
+}
+
 /// Helper functions
 impl<V> RedBlackTree<V>
 where
@@ -310,17 +295,23 @@ where
 
     /// Searches for a value in the tree returning a SearchResult that
     /// captures if the search yield a hit, miss or empty tree.  
-    pub fn search(&self, value: &V) -> SearchResult {
+    pub fn search(&self, value: &V) -> Option<NodeId> {
+        self.find_nearest_node(value).hit_then(|v| v)
+    }
+
+    /// Searches for a value in the tree returning a SearchResult that
+    /// captures if the search yield a hit, miss or empty tree.  
+    fn find_nearest_node(&self, value: &V) -> SearchResult {
         self.root.map_or_else(
             || SearchResult::Empty,
             |root| {
-                let mut next_step = WalkStep::Continue(root);
-                while let WalkStep::Continue(next_id) = next_step {
+                let mut next_step = ControlFlowState::Continue(root);
+                while let ControlFlowState::Continue(next_id) = next_step {
                     next_step = self.next_step(next_id, value);
                 }
 
                 next_step
-                    .stop()
+                    .break_value()
                     .and_then(|last| {
                         self.get(last).map(|last_color_node| {
                             let last_node = last_color_node.as_inner();
@@ -340,23 +331,23 @@ where
     /// Returns an option representing the next step in a tree walk. If `None`
     /// is returned. There are no further steps to take. Otherwise the the
     /// direction of the next step is returned.
-    fn next_step(&self, base_id: NodeId, value: &V) -> WalkStep {
+    fn next_step(&self, base_id: NodeId, value: &V) -> ControlFlowState {
         // panic if no node.
         let node = self.get(base_id).unwrap().as_inner();
 
         if value == &node.inner {
-            WalkStep::Stop(base_id)
+            ControlFlowState::Break(base_id)
         } else if value < &node.inner {
             // if left leaf exists follow that direction.
             match node.left {
-                Some(next) => WalkStep::Continue(next),
-                None => WalkStep::Stop(base_id),
+                Some(next) => ControlFlowState::Continue(next),
+                None => ControlFlowState::Break(base_id),
             }
         } else {
             // if right leaf exists follow that direction.
             match node.right {
-                Some(next) => WalkStep::Continue(next),
-                None => WalkStep::Stop(base_id),
+                Some(next) => ControlFlowState::Continue(next),
+                None => ControlFlowState::Break(base_id),
             }
         }
     }
@@ -374,7 +365,7 @@ where
     pub fn insert_mut(&mut self, value: V) -> Option<NodeId> {
         let next_id = NodeId::from(self.nodes.len());
 
-        match self.search(&value) {
+        match self.find_nearest_node(&value) {
             SearchResult::Hit(node) => Some(node),
             SearchResult::Empty => {
                 self.root = Some(next_id);
@@ -503,11 +494,15 @@ where
                 })
         })
     }
-    /// Rotates left from a root node, returning the new root NodeId.
-    fn rotate_left_mut(&mut self, node_id: NodeId) -> Option<NodeId> {
-        let new_left_node_id = node_id;
 
-        self.get(node_id)
+    /// Rotates left from a root node, returning the new root NodeId.
+    ///  x            z
+    ///   \          /
+    ///    z --->  x
+    ///     \       \
+    ///      y       y
+    fn rotate_left_mut(&mut self, x_id: NodeId) -> Option<NodeId> {
+        self.get(x_id)
             .and_then(|color_node| {
                 color_node
                     .as_inner()
@@ -521,13 +516,13 @@ where
                     .map(|new_parent_color_node| {
                         let new_child_right_node_id = new_parent_color_node.as_inner().left;
                         new_parent_color_node.as_inner_mut().parent = upstream_parent_id;
-                        new_parent_color_node.as_inner_mut().left = Some(node_id);
+                        new_parent_color_node.as_inner_mut().left = Some(x_id);
 
                         (new_parent_color_node.id(), new_child_right_node_id)
                         // assign rotated ids to child
                     })
                     .and_then(|(new_parent_id, optional_new_right_node_id)| {
-                        self.get_mut(new_left_node_id).map(|new_left_color_node| {
+                        self.get_mut(x_id).map(|new_left_color_node| {
                             new_left_color_node.as_inner_mut().parent = Some(new_parent_id);
                             new_left_color_node.as_inner_mut().right = optional_new_right_node_id;
                             (new_parent_id, optional_new_right_node_id)
@@ -801,7 +796,10 @@ mod tests {
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
-        assert_eq!(SearchResult::Hit(NodeId::from(1)), tree.search(&5));
+        assert_eq!(
+            SearchResult::Hit(NodeId::from(1)),
+            tree.find_nearest_node(&5)
+        );
     }
 
     #[test]
@@ -823,17 +821,17 @@ mod tests {
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         let root = tree
-            .search(&root_val)
+            .find_nearest_node(&root_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| color_node.color());
 
         let left = tree
-            .search(&left_val)
+            .find_nearest_node(&left_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| color_node.color());
 
         let right = tree
-            .search(&right_val)
+            .find_nearest_node(&right_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| color_node.color());
 
@@ -852,22 +850,22 @@ mod tests {
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         let child = tree
-            .search(&child_val)
+            .find_nearest_node(&child_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
         let parent = tree
-            .search(&parent_val)
+            .find_nearest_node(&parent_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
         let uncle = tree
-            .search(&uncle_val)
+            .find_nearest_node(&uncle_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
         let grandparent = tree
-            .search(&grandparent_val)
+            .find_nearest_node(&grandparent_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| (color_node.color(), color_node.as_inner().inner));
 
