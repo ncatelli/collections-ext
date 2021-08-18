@@ -414,22 +414,19 @@ where
     fn rebalance_mut(&mut self, node_id: NodeId) {
         let mut next_step = Some(Rebalance::Continue(node_id));
         while let Some(step) = next_step {
+            next_step = None;
             match step {
                 Rebalance::LeftLeft => {
-                    self.handle_rr_mut();
-                    next_step = None;
+                    self.handle_ll_mut(node_id);
                 }
                 Rebalance::LeftRight => {
-                    self.handle_lr_mut();
-                    next_step = None;
+                    self.handle_lr_mut(node_id);
                 }
                 Rebalance::RightRight => {
-                    self.handle_rr_mut();
-                    next_step = None;
+                    self.handle_rr_mut(node_id);
                 }
                 Rebalance::RightLeft => {
-                    self.handle_rl_mut();
-                    next_step = None;
+                    self.handle_rl_mut(node_id);
                 }
                 Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id),
                 Rebalance::Continue(next) => next_step = self.rebalance_step_mut(next),
@@ -451,7 +448,7 @@ where
             .unwrap_or_else(|| (None, Color::Black));
 
         if parent_color == Color::Red {
-            if let (Some(uncle_id), Color::Red) = (optional_uncle_id, uncle_color) {
+            if let (Some(_), Color::Red) = (optional_uncle_id, uncle_color) {
                 Some(Rebalance::Recolor(base_node_id))
             } else {
                 let base_direction = self.get_direction_of_node(base_node_id);
@@ -578,73 +575,77 @@ where
             .map(|grandparent_id| Rebalance::Recolor(grandparent_id))
     }
 
-    fn handle_ll_mut(&mut self) {
-        self.root
-            // rotate the whole tree left.
-            .map(|original_root_id| self.rotate_left_mut(original_root_id))
-            // update the root of the tree with the new root id.
-            .and_then(|new_root_id| {
-                self.root = new_root_id;
-                new_root_id
-            })
-            .and_then(|new_root_id| {
-                self.get_mut(new_root_id)
-                    .and_then(|new_root_color_node| {
-                        new_root_color_node.set_color_mut(Color::Black);
+    fn handle_ll_mut(&mut self, node_id: NodeId) {
+        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
+        let grandparent_id = self
+            .get_grandparent(node_id)
+            .map(|grandfather| grandfather.id())
+            .unwrap();
 
-                        new_root_color_node.as_inner().left
-                    })
-                    .and_then(|left_node_id| {
-                        self.get_mut(left_node_id)
-                            .map(|left_color_node| left_color_node.set_color_mut(Color::Red))
-                    })
-            });
-    }
-
-    fn handle_lr_mut(&mut self) {
+        // rotate grandfather right
         let _ = self
-            .root
-            // rotate the whole tree left.
-            .and_then(|original_root_id| {
-                self.get(original_root_id).and_then(|original_root_node| {
-                    original_root_node
-                        .as_inner()
-                        .left
-                        .map(|left_node_id| (original_root_id, left_node_id))
-                })
-            })
-            .and_then(|(original_root_node_id, left_node_id)| {
-                let new_branch_root = self.rotate_left_mut(left_node_id);
-                self.get_mut(original_root_node_id).map(|root_color_node| {
-                    root_color_node.as_inner_mut().left = new_branch_root;
-                    root_color_node.id()
-                })
-            })
-            .map(|_| self.handle_rr_mut());
+            .rotate_right_mut(grandparent_id)
+            .map(|new_root_id| self.root = Some(new_root_id))
+            .unwrap();
+
+        // flip the colors of the original grandparent and parent
+        self.get_mut(grandparent_id)
+            .map(|grandfather| grandfather.flip_color_mut())
+            .unwrap();
+        self.get_mut(parent_id)
+            .map(|grandfather| grandfather.flip_color_mut())
+            .unwrap();
     }
 
-    fn handle_rr_mut(&mut self) {
-        self.root
-            .map(|original_root_id| self.rotate_right_mut(original_root_id))
-            // update the root of the tree with the new root id.
-            .and_then(|new_root_id| {
-                self.root = new_root_id;
-                new_root_id
-            })
-            .and_then(|new_root_id| {
-                self.get_mut(new_root_id)
-                    .and_then(|new_root_color_node| {
-                        new_root_color_node.set_color_mut(Color::Black);
+    fn handle_lr_mut(&mut self, node_id: NodeId) {
+        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
 
-                        new_root_color_node.as_inner().right
-                    })
-                    .and_then(|right_node_id| {
-                        self.get_mut(right_node_id)
-                            .map(|right_color_node| right_color_node.set_color_mut(Color::Red))
-                    })
-            });
+        // rotate parent left
+        let _ = self
+            .rotate_left_mut(parent_id)
+            .map(|new_root_id| self.root = Some(new_root_id))
+            .unwrap();
+
+        // then apply an LL case
+        self.handle_ll_mut(node_id)
     }
 
+    fn handle_rr_mut(&mut self, node_id: NodeId) {
+        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
+        let grandparent_id = self
+            .get_grandparent(node_id)
+            .map(|grandfather| grandfather.id())
+            .unwrap();
+
+        // rotate grandfather left
+        let _ = self
+            .rotate_left_mut(grandparent_id)
+            .map(|new_root_id| self.root = Some(new_root_id))
+            .unwrap();
+
+        // flip the colors of the original grandparent and parent
+        self.get_mut(grandparent_id)
+            .map(|grandfather| grandfather.flip_color_mut())
+            .unwrap();
+        self.get_mut(parent_id)
+            .map(|grandfather| grandfather.flip_color_mut())
+            .unwrap();
+    }
+
+    fn handle_rl_mut(&mut self, node_id: NodeId) {
+        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
+
+        // rotate parent right
+        let _ = self
+            .rotate_right_mut(parent_id)
+            .map(|new_root_id| self.root = Some(new_root_id))
+            .unwrap();
+
+        // then apply an RR case
+        self.handle_rr_mut(node_id)
+    }
+
+    /*
     fn handle_rl_mut(&mut self) {
         let _ = self
             .root
@@ -663,8 +664,9 @@ where
                     root_color_node.id()
                 })
             })
-            .map(|_| self.handle_ll_mut());
+            .map(|_| self.handle_rr_mut());
     }
+    */
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
     /// the parent Node if it exists.
@@ -817,8 +819,8 @@ mod tests {
 
     #[test]
     fn should_recolor_node_if_two_red_nodes_occur() {
-        let node_values = [15, 10, 20, 5];
-        let [grandparent_val, parent_val, uncle_val, child_val] = node_values;
+        let node_values = [10, 15, 20, 5];
+        let [parent_val, grandparent_val, uncle_val, child_val] = node_values;
         let tree = node_values
             .to_vec()
             .into_iter()
@@ -843,6 +845,8 @@ mod tests {
             .find_nearest_node(&grandparent_val)
             .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
             .map(|color_node| (color_node.color(), color_node.as_inner().inner));
+
+        println!("{:#?}", &tree);
 
         assert_eq!(Some((Color::Red, child_val)), child);
         assert_eq!(Some((Color::Black, parent_val)), parent);
