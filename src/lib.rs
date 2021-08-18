@@ -462,10 +462,10 @@ where
             // These are safe to unwrap. We can
             // assert that there is a child and parent by
             // previous checks.
-            match (
-                self.get_direction_of_node(parent_id),
-                self.get_direction_of_node(base_node_id).unwrap(),
-            ) {
+            let base_direction = self.get_direction_of_node(base_node_id).unwrap();
+            let optional_parent_direction = self.get_direction_of_node(parent_id);
+
+            match (optional_parent_direction, base_direction) {
                 // It's not a rotation situation if there is
                 // no grandparent. So short-circuit.
                 (None, _) => None,
