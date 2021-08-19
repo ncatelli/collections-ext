@@ -86,7 +86,7 @@ impl Color {
     }
 }
 
-/// ColorNode Wraps a node, with an optional Color value.
+/// ColorNode wraps a node, with an optional Color value.
 #[derive(Debug, Clone)]
 pub enum ColorNode<V> {
     Red(Node<V>),
@@ -647,7 +647,7 @@ where
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
     /// the parent Node if it exists.
-    pub fn get_parent(&self, id: NodeId) -> Option<&ColorNode<V>> {
+    fn get_parent(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get(id).and_then(|node| {
             node.as_inner()
                 .parent
@@ -657,7 +657,7 @@ where
 
     /// Retrieves a the parent of a Node, Optionally returning a mutable
     /// reference to the parent Node if it exists.
-    pub fn get_parent_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
+    fn get_parent_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
         match self.get_parent(id).map(|parent_node| parent_node.id()) {
             Some(parent_id) => self.get_mut(parent_id),
             None => None,
@@ -666,7 +666,7 @@ where
 
     /// Retrieves the parent of a Node's parent, Optionally returning a
     /// reference to the grandparent Node if it exists.
-    pub fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<V>> {
+    fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get_parent(id).and_then(|node| {
             node.as_inner()
                 .parent
@@ -676,14 +676,14 @@ where
 
     /// Retrieves the uncle of a Node, Optionally returning a reference to the
     /// uncle Node if it exists.
-    pub fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<V>> {
+    fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get_parent(id)
             .and_then(|node| self.get_sibling(node.as_inner().id))
     }
 
     /// Retrieves the sibling of a Node, Optionally returning a reference to the
     /// sibling Node if it exists.
-    pub fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<V>> {
+    fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<V>> {
         self.get_parent(id)
             .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
                 // return any leaf that doesn't match the original id or none.
@@ -695,7 +695,8 @@ where
 
     /// Retrieves the close nephew of a Node, Optionally returning a reference
     /// to the close nephew Node if it exists.
-    pub fn get_close_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
+    #[allow(dead_code)]
+    fn get_close_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
         let direction = self.get_direction_of_node(id)?;
 
         self.get_sibling(id)
@@ -709,7 +710,8 @@ where
 
     /// Retrieves the distant nephew of a Node, Optionally returning a reference
     /// to the distant nephew Node if it exists.
-    pub fn get_distant_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
+    #[allow(dead_code)]
+    fn get_distant_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
         let direction = self.get_direction_of_node(id)?;
 
         self.get_sibling(id)
@@ -722,7 +724,7 @@ where
     }
 
     /// Retrieves the direction of a node from it's parent.
-    pub fn get_direction_of_node(&self, id: NodeId) -> Option<Direction> {
+    fn get_direction_of_node(&self, id: NodeId) -> Option<Direction> {
         self.get_parent(id)
             .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
                 (Some(leaf_id), _) if leaf_id == id => Some(Direction::Left),
