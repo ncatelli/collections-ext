@@ -10,16 +10,17 @@ impl NodeId {
     pub fn new(inner: usize) -> Self {
         Self(inner)
     }
-
-    /// Converts the NodeId to a usize.
-    pub fn to_usize(self) -> usize {
-        self.0
-    }
 }
 
 impl From<usize> for NodeId {
     fn from(id: usize) -> Self {
         Self::new(id)
+    }
+}
+
+impl From<NodeId> for usize {
+    fn from(node_id: NodeId) -> Self {
+        node_id.0
     }
 }
 
@@ -273,13 +274,13 @@ impl<V> std::ops::Index<NodeId> for RedBlackTree<V> {
     type Output = ColorNode<V>;
 
     fn index(&self, idx: NodeId) -> &Self::Output {
-        &self.nodes[idx.to_usize()]
+        &self.nodes[usize::from(idx)]
     }
 }
 
 impl<V> std::ops::IndexMut<NodeId> for RedBlackTree<V> {
     fn index_mut(&mut self, idx: NodeId) -> &mut Self::Output {
-        &mut self.nodes[idx.to_usize()]
+        &mut self.nodes[usize::from(idx)]
     }
 }
 
@@ -291,13 +292,13 @@ where
     /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
     /// returned. Otherwise None is returned.
     pub fn get(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.nodes.get(id.to_usize())
+        self.nodes.get(usize::from(id))
     }
 
     /// Retrieves a mutable Node by Id. If the Id exists in the tree,
     /// Some<&mut Node> is returned. Otherwise None is returned.
     pub fn get_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
-        self.nodes.get_mut(id.to_usize())
+        self.nodes.get_mut(usize::from(id))
     }
 
     /// Searches for a value in the tree returning a SearchResult that
