@@ -437,15 +437,15 @@ where
                     self.handle_rl_mut(node_id);
                 }
                 Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id),
-                Rebalance::Continue(next) => next_step = self.rebalance_step_mut(next),
+                Rebalance::Continue(next) => next_step = self.needs_rebalance(next),
             }
         }
     }
 
-    /// Rebalance a tree starting at node_id and recursing up. If a recolor
-    /// occurs, a `Some(NodeId)` is returned, where the `NodeId` represents
-    /// the parent of the starting node to continue the recolor recursively up.
-    fn rebalance_step_mut(&mut self, base_node_id: NodeId) -> Option<Rebalance> {
+    /// Check the balance of the tree starting from `base_node_id`, if the
+    /// tree is balanced, `None` is returned otherwise `Some(Rebalance)` is
+    /// returned containing the next rebalancing operation.
+    fn needs_rebalance(&self, base_node_id: NodeId) -> Option<Rebalance> {
         // short-circuit to none if the base is root.
         let (parent_id, parent_color) = self
             .get_parent(base_node_id)
