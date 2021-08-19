@@ -130,6 +130,7 @@ where
         self
     }
 
+    /// Inverts the color of a node in place.
     pub fn flip_color_mut(&mut self) {
         match self {
             ColorNode::Red(inner) => *self = Self::Black(std::mem::take(inner)),
@@ -137,11 +138,13 @@ where
         }
     }
 
+    /// Returns a node set to the color passed.
     pub fn set_color(mut self, color: Color) -> Self {
         self.set_color_mut(color);
         self
     }
 
+    /// Sets the color of a node to the specified color in place.
     pub fn set_color_mut(&mut self, color: Color) {
         match self {
             ColorNode::Red(inner) | ColorNode::Black(inner) => {
@@ -178,9 +181,13 @@ pub enum Direction {
 
 /// Rebalance captures the states of rebalance operation.
 enum Rebalance {
+    /// Represents a LeftLeft case of inbalance.
     LeftLeft,
+    /// Represents a LeftRight case of inbalance.
     LeftRight,
+    /// Represents a RightRight case of inbalance.
     RightRight,
+    /// Represents a RightLeft case of inbalance.
     RightLeft,
     /// Contains the next base node for recoloring.
     Recolor(NodeId),
