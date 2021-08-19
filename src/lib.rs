@@ -731,24 +731,21 @@ where
             })
     }
 
-    pub fn traverse_in_order<'a>(&'a self) -> InOrder<'a, V> {
-        InOrder::new(self)
-    }
-
-    pub fn iter<'a>(&'a self) -> InOrder<'a, V> {
-        InOrder::new(self)
+    /// Returns an Iterator for traversing an array in order.
+    pub fn traverse_in_order(&self) -> IterInOrder<'_, V> {
+        IterInOrder::new(self)
     }
 }
 
-pub struct InOrder<'a, V> {
+pub struct IterInOrder<'a, V: 'a> {
     inner: &'a RedBlackTree<V>,
     left_most_node: Option<NodeId>,
     stack: Vec<NodeId>,
 }
 
-impl<'a, V> InOrder<'a, V>
+impl<'a, V: 'a> IterInOrder<'a, V>
 where
-    V: PartialEq + PartialOrd + Default,
+    V: PartialEq + PartialOrd + Default + 'a,
 {
     pub fn new(inner: &'a RedBlackTree<V>) -> Self {
         Self {
@@ -759,9 +756,9 @@ where
     }
 }
 
-impl<'a, V> Iterator for InOrder<'a, V>
+impl<'a, V: 'a> Iterator for IterInOrder<'a, V>
 where
-    V: PartialEq + PartialOrd + Default,
+    V: PartialEq + PartialOrd + Default + 'a,
 {
     type Item = &'a V;
     /*
