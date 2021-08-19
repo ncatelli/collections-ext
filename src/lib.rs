@@ -615,7 +615,7 @@ where
             .unwrap();
 
         // then apply an LL case
-        self.handle_ll_mut(node_id)
+        self.handle_ll_mut(parent_id)
     }
 
     fn handle_rr_mut(&mut self, node_id: NodeId) {
@@ -650,7 +650,7 @@ where
             .unwrap();
 
         // then apply an RR case
-        self.handle_rr_mut(node_id)
+        self.handle_rr_mut(parent_id)
     }
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
@@ -979,7 +979,7 @@ mod tests {
 
     #[test]
     fn should_traverse_in_order() {
-        let tree = vec![10, 5, 15]
+        let tree = vec![10, 5, 15, 25]
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
@@ -988,6 +988,7 @@ mod tests {
         assert_eq!(Some(&5), i.next());
         assert_eq!(Some(&10), i.next());
         assert_eq!(Some(&15), i.next());
+        assert_eq!(Some(&25), i.next());
         assert_eq!(None, i.next());
     }
 }
