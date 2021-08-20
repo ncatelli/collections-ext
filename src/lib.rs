@@ -510,24 +510,28 @@ where
             Direction::Right => z_color_node.as_inner().right,
         });
 
-        let upstream_parent_id = self
+        let optional_upstream_parent_id = self
             .get_parent(x_id)
-            .and_then(|x_node| x_node.as_inner().parent);
+            .map(|upstream_parent| upstream_parent.id());
 
-        // Switch x with z on the upstream parent.
-        upstream_parent_id.and_then(|id| {
+        if let Some(upstream_parent_id) = optional_upstream_parent_id {
+            // Switch x with z on the upstream parent.
             // safe to unwrap
             let upstream_direction = self.get_direction_of_node(x_id).unwrap();
-            self.get_mut(id).map(|node| match upstream_direction {
-                Direction::Left => node.as_inner_mut().left = Some(z_id),
-                Direction::Right => node.as_inner_mut().right = Some(z_id),
-            })
-        });
+            let _ = self
+                .get_mut(upstream_parent_id)
+                .map(|node| match upstream_direction {
+                    Direction::Left => node.as_inner_mut().left = Some(z_id),
+                    Direction::Right => node.as_inner_mut().right = Some(z_id),
+                });
+        } else {
+            self.root = Some(z_id);
+        }
 
         // Set the parent of z to the upstream parent and make x a child of z.
         let _ = self.get_mut(z_id).map(|z_node| {
             let z_inner = z_node.as_inner_mut();
-            z_inner.parent = upstream_parent_id;
+            z_inner.parent = optional_upstream_parent_id;
             match direction {
                 Direction::Left => z_inner.left = Some(x_id),
                 Direction::Right => z_inner.right = Some(x_id),
@@ -591,10 +595,7 @@ where
             .unwrap();
 
         // rotate grandfather right
-        let _ = self
-            .rotate_right_mut(grandparent_id)
-            .map(|new_root_id| self.root = Some(new_root_id))
-            .unwrap();
+        self.rotate_right_mut(grandparent_id);
 
         // flip the colors of the original grandparent and parent
         self.get_mut(grandparent_id)
@@ -609,13 +610,12 @@ where
         let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
 
         // rotate parent left
-        let _ = self
-            .rotate_left_mut(parent_id)
-            .map(|new_root_id| self.root = Some(new_root_id))
-            .unwrap();
+        self.rotate_left_mut(parent_id);
+        // rotated down.
+        let new_base_id = parent_id;
 
         // then apply an LL case
-        self.handle_ll_mut(parent_id)
+        self.handle_ll_mut(new_base_id)
     }
 
     fn handle_rr_mut(&mut self, node_id: NodeId) {
@@ -626,10 +626,7 @@ where
             .unwrap();
 
         // rotate grandfather left
-        let _ = self
-            .rotate_left_mut(grandparent_id)
-            .map(|new_root_id| self.root = Some(new_root_id))
-            .unwrap();
+        self.rotate_left_mut(grandparent_id);
 
         // flip the colors of the original grandparent and parent
         self.get_mut(grandparent_id)
@@ -644,13 +641,13 @@ where
         let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
 
         // rotate parent right
-        let _ = self
-            .rotate_right_mut(parent_id)
-            .map(|new_root_id| self.root = Some(new_root_id))
-            .unwrap();
+        self.rotate_right_mut(parent_id);
+
+        // rotated down.
+        let new_base_id = parent_id;
 
         // then apply an RR case
-        self.handle_rr_mut(parent_id)
+        self.handle_rr_mut(new_base_id)
     }
 
     /// Retrieves a the parent of a Node, Optionally returning a reference to
@@ -948,7 +945,7 @@ mod tests {
 
     #[test]
     fn should_traverse_in_order() {
-        let tree = vec![10, 5, 15, 25]
+        let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
@@ -957,6 +954,7 @@ mod tests {
         assert_eq!(Some(&5), i.next());
         assert_eq!(Some(&10), i.next());
         assert_eq!(Some(&15), i.next());
+        assert_eq!(Some(&20), i.next());
         assert_eq!(Some(&25), i.next());
         assert_eq!(None, i.next());
     }
