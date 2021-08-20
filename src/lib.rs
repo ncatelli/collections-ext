@@ -422,7 +422,7 @@ where
     fn find_in_order_successor_to(&self, base_node_id: NodeId) -> Option<NodeId> {
         self.get(base_node_id)
             .and_then(|base_color_node| base_color_node.as_inner().right)
-            .and_then(|right_node_id| self.min_from_base_node(right_node_id))
+            .and_then(|right_node_id| self.find_min_from(right_node_id))
     }
 
     pub fn delete(mut self, value: &V) -> Self {
@@ -756,12 +756,12 @@ where
     /// tree is empty.
     pub fn min(&self) -> Option<NodeId> {
         self.root
-            .and_then(|base_node_id| self.min_from_base_node(base_node_id))
+            .and_then(|base_node_id| self.find_min_from(base_node_id))
     }
 
     /// Returns the node with the left-most value (smallest) or `None`, if
     /// empty, starting from a given base node.
-    fn min_from_base_node(&self, base_node_id: NodeId) -> Option<NodeId> {
+    fn find_min_from(&self, base_node_id: NodeId) -> Option<NodeId> {
         let mut current = Some(base_node_id);
         let mut left_most_node = current;
         while let Some(id) = current {
