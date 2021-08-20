@@ -750,6 +750,48 @@ where
             })
     }
 
+    /// Returns the node with the left-most value (smallest) or `None` if the
+    /// tree is empty.
+    pub fn min(&self) -> Option<NodeId> {
+        self.root
+            .and_then(|base_node_id| self.min_from_base_node(base_node_id))
+    }
+
+    /// Returns the node with the left-most value (smallest) or `None`, if
+    /// empty, starting from a given base node.
+    fn min_from_base_node(&self, base_node_id: NodeId) -> Option<NodeId> {
+        let mut current = Some(base_node_id);
+        let mut left_most_node = current;
+        while let Some(id) = current {
+            left_most_node = current;
+            current = self
+                .get(id)
+                .and_then(|color_node| color_node.as_inner().left);
+        }
+        left_most_node
+    }
+
+    /// Returns the node with the right-most value (largest) or `None` if the
+    /// tree is empty.
+    pub fn max(&self) -> Option<NodeId> {
+        self.root
+            .and_then(|base_node_id| self.max_from_base_node(base_node_id))
+    }
+
+    /// Returns the node with the right-most value (largest) or `None`, if
+    /// empty, starting from a given base node.
+    fn max_from_base_node(&self, base_node_id: NodeId) -> Option<NodeId> {
+        let mut current = Some(base_node_id);
+        let mut right_most_node = current;
+        while let Some(id) = current {
+            right_most_node = current;
+            current = self
+                .get(id)
+                .and_then(|color_node| color_node.as_inner().right);
+        }
+        right_most_node
+    }
+
     /// Returns an Iterator for traversing an array in order.
     pub fn traverse_in_order(&self) -> IterInOrder<'_, V> {
         IterInOrder::new(self)
@@ -790,7 +832,6 @@ where
                 .get(id)
                 .and_then(|color_node| color_node.as_inner().left);
         }
-
         if let Some(up_from_current) = self.stack.pop() {
             self.left_most_node = self
                 .inner
@@ -953,6 +994,23 @@ mod tests {
 
         // fifteens's new parent should be the 10 node.
         assert_eq!(Some(NodeId::from(0)), fifteen.parent);
+    }
+
+    #[test]
+    fn should_yield_correct_min_and_max_for_a_given_tree() {
+        let tree = vec![10, 5, 15, 25, 20]
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+        let max_node_id = NodeId::from(3);
+        let min_node_id = NodeId::from(1);
+
+        assert_eq!(Some(max_node_id), tree.max());
+        assert_eq!(Some(min_node_id), tree.min());
+
+        let empty_tree = RedBlackTree::<usize>::default();
+
+        assert_eq!(None, empty_tree.max());
+        assert_eq!(None, empty_tree.min());
     }
 
     #[test]
