@@ -419,6 +419,18 @@ where
         }
     }
 
+    pub fn delete(mut self, value: V) -> Self {
+        self.delete_mut(value);
+        self
+    }
+
+    pub fn delete_mut(&mut self, value: V) -> Option<NodeId> {
+        let _next_id = NodeId::from(self.nodes.len());
+
+        let _matching_node = self.find_nearest_node(&value).hit_then(|f| f)?;
+        todo!()
+    }
+
     fn rebalance_mut(&mut self, node_id: NodeId) {
         let mut next_step = Some(Rebalance::Continue(node_id));
         while let Some(step) = next_step {
@@ -437,7 +449,7 @@ where
                     self.handle_rl_mut(node_id);
                 }
                 Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id),
-                Rebalance::Continue(next) => next_step = self.needs_rebalance(next),
+                Rebalance::Continue(next) => next_step = self.needs_rebalance_after_insertion(next),
             }
         }
     }
@@ -445,7 +457,7 @@ where
     /// Check the balance of the tree starting from `base_node_id`, if the
     /// tree is balanced, `None` is returned otherwise `Some(Rebalance)` is
     /// returned containing the next rebalancing operation.
-    fn needs_rebalance(&self, base_node_id: NodeId) -> Option<Rebalance> {
+    fn needs_rebalance_after_insertion(&self, base_node_id: NodeId) -> Option<Rebalance> {
         // short-circuit to none if the base is root.
         let (parent_id, parent_color) = self
             .get_parent(base_node_id)
