@@ -192,7 +192,6 @@ enum Rebalance {
     RightLeft,
     /// Contains the next base node for recoloring.
     Recolor(NodeId),
-    Continue(NodeId),
 }
 
 /// SearchResult represents the results of a binary tree search.
@@ -432,7 +431,7 @@ where
     }
 
     fn rebalance_mut(&mut self, node_id: NodeId) {
-        let mut next_step = Some(Rebalance::Continue(node_id));
+        let mut next_step = self.needs_rebalance_after_insertion(node_id);
         while let Some(step) = next_step {
             next_step = None;
             match step {
@@ -449,7 +448,6 @@ where
                     self.handle_rl_mut(node_id);
                 }
                 Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id),
-                Rebalance::Continue(next) => next_step = self.needs_rebalance_after_insertion(next),
             }
         }
     }
