@@ -957,5 +957,13 @@ mod tests {
         assert_eq!(Some(&20), i.next());
         assert_eq!(Some(&25), i.next());
         assert_eq!(None, i.next());
+
+        let tree = (0..1024)
+            .rev()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        let received: Vec<u16> = tree.traverse_in_order().copied().collect();
+        let expected: Vec<u16> = (0..1024).collect();
+        assert_eq!(expected, received);
     }
 }
