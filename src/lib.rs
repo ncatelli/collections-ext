@@ -418,15 +418,19 @@ where
         }
     }
 
-    pub fn delete(mut self, value: V) -> Self {
+    /// Returns the minimum value node tot he right of the base_node.
+    fn find_in_order_successor_to(&self, base_node_id: NodeId) -> Option<NodeId> {
+        self.get(base_node_id)
+            .and_then(|base_color_node| base_color_node.as_inner().right)
+            .and_then(|right_node_id| self.min_from_base_node(right_node_id))
+    }
+
+    pub fn delete(mut self, value: &V) -> Self {
         self.delete_mut(value);
         self
     }
 
-    pub fn delete_mut(&mut self, value: V) -> Option<NodeId> {
-        let _next_id = NodeId::from(self.nodes.len());
-
-        let _matching_node = self.find_nearest_node(&value).hit_then(|f| f)?;
+    pub fn delete_mut(&mut self, _value: &V) -> Option<NodeId> {
         todo!()
     }
 
