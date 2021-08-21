@@ -450,6 +450,9 @@ where
             .get(base_node_id)
             .map(|color_node| (color_node.as_inner().left, color_node.as_inner().right))?;
 
+        // take the base node to handle for delete.
+        let base_node = self.nodes[usize::from(base_node_id)].take()?;
+
         // delete target must have less than 2 children.
         if !(base_node_left_id.is_some() && base_node_right_id.is_some()) {
             let new_base_node_id = base_node_left_id.or(base_node_right_id);
@@ -460,7 +463,7 @@ where
                 })
             });
 
-            // set new new child on upstream node..
+            // set new child on upstream node..
             optional_upstream_node_id.and_then(|id| {
                 self.get_mut(id)
                     .map(|upstream_node| match base_node_direction {
@@ -470,11 +473,11 @@ where
                         Some(Direction::Right) => {
                             upstream_node.as_inner_mut().right = new_base_node_id
                         }
-                        None => (),
+                        None => panic!("deletion of a node should always have a direction."),
                     })
             });
 
-            new_base_node_id
+            new_base_node_id.or(optional_upstream_node_id)
         } else {
             // Should be safe to unwrap as this condition cannot be
             // hit unless a right side is present.
@@ -502,8 +505,7 @@ where
                 base_node.right = optional_successor_node_right_id;
             }
 
-            // Take ownership of the sucessor and swap the value with base.
-            let mut successor_node = self.nodes[usize::from(base_node_id)].take()?;
+            let mut successor_node = base_node;
             let base_node = self.get_mut(base_node_id)?.as_inner_mut();
             mem::swap(
                 &mut base_node.inner,
@@ -1117,5 +1119,15 @@ mod tests {
         let received: Vec<u16> = tree.traverse_in_order().copied().collect();
         let expected: Vec<u16> = (0..1024).collect();
         assert_eq!(expected, received);
+    }
+
+    #[test]
+    fn should_rearrange_tree_correctly_on_delete() {
+        let tree = vec![10, 5, 1]
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        let modified_tree = tree.delete(&1);
+        assert!(modified_tree.get(NodeId::from(2)).is_none());
     }
 }
