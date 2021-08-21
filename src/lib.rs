@@ -244,7 +244,7 @@ impl ControlFlowState {
 #[derive(Debug, Default, Clone)]
 pub struct RedBlackTree<V> {
     root: Option<NodeId>,
-    nodes: Vec<ColorNode<V>>,
+    nodes: Vec<Option<ColorNode<V>>>,
 }
 
 impl<V> RedBlackTree<V>
@@ -253,13 +253,13 @@ where
 {
     /// Instantiates a new instance of RedBlackTree, making the first item in
     /// the passed vector the root node.
-    pub fn new(nodes: Vec<ColorNode<V>>) -> Self {
+    pub fn new(nodes: Vec<Option<ColorNode<V>>>) -> Self {
         match nodes.get(0) {
-            Some(node_id) => Self {
+            Some(Some(node_id)) => Self {
                 root: Some(node_id.as_inner().id),
                 nodes,
             },
-            None => Self { root: None, nodes },
+            _ => Self { root: None, nodes },
         }
     }
 
@@ -270,7 +270,7 @@ where
 }
 
 impl<V> std::ops::Index<NodeId> for RedBlackTree<V> {
-    type Output = ColorNode<V>;
+    type Output = Option<ColorNode<V>>;
 
     fn index(&self, idx: NodeId) -> &Self::Output {
         &self.nodes[usize::from(idx)]
@@ -291,13 +291,17 @@ where
     /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
     /// returned. Otherwise None is returned.
     pub fn get(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.nodes.get(usize::from(id))
+        self.nodes
+            .get(usize::from(id))
+            .and_then(|optional_color_node| optional_color_node.as_ref())
     }
 
     /// Retrieves a mutable Node by Id. If the Id exists in the tree,
     /// Some<&mut Node> is returned. Otherwise None is returned.
     pub fn get_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
-        self.nodes.get_mut(usize::from(id))
+        self.nodes
+            .get_mut(usize::from(id))
+            .and_then(|optional_color_node| optional_color_node.as_mut())
     }
 
     /// Searches for a value in the tree returning a SearchResult that
@@ -376,9 +380,9 @@ where
             SearchResult::Hit(node) => Some(node),
             SearchResult::Empty => {
                 self.root = Some(next_id);
-                self.nodes.push(ColorNode::Black(Node::new(
+                self.nodes.push(Some(ColorNode::Black(Node::new(
                     next_id, value, None, None, None,
-                )));
+                ))));
                 None
             }
             SearchResult::Miss(parent_node_id) => {
@@ -402,13 +406,13 @@ where
                 if is_defined.is_some() {
                     is_defined
                 } else {
-                    self.nodes.push(ColorNode::Red(Node::new(
+                    self.nodes.push(Some(ColorNode::Red(Node::new(
                         next_id,
                         value,
                         Some(parent_node_id),
                         None,
                         None,
-                    )));
+                    ))));
 
                     // rebalance the tree after a new insertions
                     self.rebalance_mut(next_id);
@@ -430,8 +434,84 @@ where
         self
     }
 
-    pub fn delete_mut(&mut self, _value: &V) -> Option<NodeId> {
-        todo!()
+    pub fn delete_mut(&mut self, value: &V) -> Option<NodeId> {
+        use std::mem;
+
+        let base_node_id = self
+            .find_nearest_node(value)
+            .hit_then(|matching_node| matching_node)?;
+        let base_node_direction = self.get_direction_of_node(base_node_id);
+        let optional_upstream_node_id = self
+            .get_parent(base_node_id)
+            .map(|parent_color_node| parent_color_node.id());
+
+        // unpack the children of the base node.
+        let (base_node_left_id, base_node_right_id) = self
+            .get(base_node_id)
+            .map(|color_node| (color_node.as_inner().left, color_node.as_inner().right))?;
+
+        // delete target must have less than 2 children.
+        if !(base_node_left_id.is_some() && base_node_right_id.is_some()) {
+            let new_base_node_id = base_node_left_id.or(base_node_right_id);
+            // set new base_nodes_new_parent.
+            new_base_node_id.and_then(|id| {
+                self.get_mut(id).map(|new_base_node| {
+                    new_base_node.as_inner_mut().parent = optional_upstream_node_id;
+                })
+            });
+
+            // set new new child on upstream node..
+            optional_upstream_node_id.and_then(|id| {
+                self.get_mut(id)
+                    .map(|upstream_node| match base_node_direction {
+                        Some(Direction::Left) => {
+                            upstream_node.as_inner_mut().left = new_base_node_id
+                        }
+                        Some(Direction::Right) => {
+                            upstream_node.as_inner_mut().right = new_base_node_id
+                        }
+                        None => (),
+                    })
+            });
+
+            new_base_node_id
+        } else {
+            // Should be safe to unwrap as this condition cannot be
+            // hit unless a right side is present.
+            let successor_node_id = self.find_in_order_successor_to(base_node_id)?;
+            let optional_parent_to_successor_id = self
+                .get_parent(successor_node_id)
+                .map(|color_node| color_node.id())
+                // make sure the parent isn't our node selected for deletion.
+                .and_then(|parent_id| {
+                    if parent_id == base_node_id {
+                        Some(parent_id)
+                    } else {
+                        None
+                    }
+                });
+
+            let optional_successor_node_right_id = self
+                .get(successor_node_id)
+                .and_then(|color_node| color_node.as_inner().right);
+            if let Some(parent_id) = optional_parent_to_successor_id {
+                let mut parent_node = self.get_mut(parent_id)?.as_inner_mut();
+                parent_node.left = optional_successor_node_right_id;
+            } else {
+                let mut base_node = self.get_mut(base_node_id)?.as_inner_mut();
+                base_node.right = optional_successor_node_right_id;
+            }
+
+            // Take ownership of the sucessor and swap the value with base.
+            let mut successor_node = self.nodes[usize::from(base_node_id)].take()?;
+            let base_node = self.get_mut(base_node_id)?.as_inner_mut();
+            mem::swap(
+                &mut base_node.inner,
+                &mut successor_node.as_inner_mut().inner,
+            );
+
+            Some(base_node_id)
+        }
     }
 
     fn rebalance_mut(&mut self, node_id: NodeId) {
@@ -955,9 +1035,9 @@ mod tests {
         // rotate the root of the tree left
         tree.rotate_left_mut(tree.root.unwrap());
 
-        let ten = tree.nodes[0].as_inner();
-        let five = tree.nodes[1].as_inner();
-        let fifteen = tree.nodes[2].as_inner();
+        let ten = tree.nodes[0].as_ref().unwrap().as_inner();
+        let five = tree.nodes[1].as_ref().unwrap().as_inner();
+        let fifteen = tree.nodes[2].as_ref().unwrap().as_inner();
 
         // five's new parent should be the 10 node.
         assert_eq!(Some(NodeId::from(0)), five.parent);
@@ -981,9 +1061,9 @@ mod tests {
         // rotate the root of the tree right
         tree.rotate_right_mut(tree.root.unwrap());
 
-        let ten = tree.nodes[0].as_inner();
-        let five = tree.nodes[1].as_inner();
-        let fifteen = tree.nodes[2].as_inner();
+        let ten = tree.nodes[0].as_ref().unwrap().as_inner();
+        let five = tree.nodes[1].as_ref().unwrap().as_inner();
+        let fifteen = tree.nodes[2].as_ref().unwrap().as_inner();
 
         // five is root and is the parent of 10 node.
         assert!(five.is_root());
