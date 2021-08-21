@@ -1127,7 +1127,9 @@ mod tests {
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
-        let modified_tree = tree.delete(&1);
+        let modified_tree = tree.clone().delete(&1);
         assert!(modified_tree.get(NodeId::from(2)).is_none());
+
+        assert_eq!(Some(NodeId::from(1)), tree.delete(&10).root);
     }
 }
