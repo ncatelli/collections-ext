@@ -435,8 +435,6 @@ where
     }
 
     pub fn delete_mut(&mut self, value: &V) -> Option<NodeId> {
-        use std::mem;
-
         let base_node_id = self
             .find_nearest_node(value)
             .hit_then(|matching_node| matching_node)?;
@@ -502,7 +500,7 @@ where
 
             let mut successor_node = base_node;
             let base_node = self.get_mut(base_node_id)?.as_inner_mut();
-            mem::swap(
+            std::mem::swap(
                 &mut base_node.inner,
                 &mut successor_node.as_inner_mut().inner,
             );
