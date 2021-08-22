@@ -441,7 +441,7 @@ where
         let base_node_direction = self.get_direction_of_node(base_node_id);
 
         // take the base node to handle for delete.
-        let base_node = self.nodes[usize::from(base_node_id)].take()?;
+        let mut base_node = self.nodes[usize::from(base_node_id)].take()?;
         let optional_upstream_node_id = base_node.as_inner().parent;
         let base_node_left_id = base_node.as_inner().left;
         let base_node_right_id = base_node.as_inner().right;
@@ -490,12 +490,12 @@ where
             let optional_successor_node_right_id = self
                 .get(successor_node_id)
                 .and_then(|color_node| color_node.as_inner().right);
+
             if let Some(parent_id) = optional_parent_to_successor_id {
                 let mut parent_node = self.get_mut(parent_id)?.as_inner_mut();
                 parent_node.left = optional_successor_node_right_id;
             } else {
-                let mut base_node = self.get_mut(base_node_id)?.as_inner_mut();
-                base_node.right = optional_successor_node_right_id;
+                base_node.as_inner_mut().right = optional_successor_node_right_id;
             }
 
             let mut successor_node = base_node;
