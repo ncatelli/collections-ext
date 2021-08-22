@@ -441,17 +441,12 @@ where
             .find_nearest_node(value)
             .hit_then(|matching_node| matching_node)?;
         let base_node_direction = self.get_direction_of_node(base_node_id);
-        let optional_upstream_node_id = self
-            .get_parent(base_node_id)
-            .map(|parent_color_node| parent_color_node.id());
-
-        // unpack the children of the base node.
-        let (base_node_left_id, base_node_right_id) = self
-            .get(base_node_id)
-            .map(|color_node| (color_node.as_inner().left, color_node.as_inner().right))?;
 
         // take the base node to handle for delete.
         let base_node = self.nodes[usize::from(base_node_id)].take()?;
+        let optional_upstream_node_id = base_node.as_inner().parent;
+        let base_node_left_id = base_node.as_inner().left;
+        let base_node_right_id = base_node.as_inner().right;
 
         // delete target must have less than 2 children.
         if !(base_node_left_id.is_some() && base_node_right_id.is_some()) {
