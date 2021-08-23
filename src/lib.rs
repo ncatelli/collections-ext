@@ -240,6 +240,18 @@ impl ControlFlowState {
     }
 }
 
+/// Represents the three possible situations that a node can encounter on a delete,
+#[derive(Clone, Copy, PartialEq)]
+enum DeleteSuccessor {
+    /// Node has two children. Return the in-order successor.
+    Double(Option<NodeId>),
+    /// Node has a single child.
+    Single(NodeId),
+    /// Node has no children (is a leaf or root).
+    /// Can be deleted directly.
+    None,
+}
+
 /// An implementation of a Red-Black Tree
 #[derive(Debug, Default, Clone)]
 pub struct RedBlackTree<V> {
@@ -429,6 +441,35 @@ where
             .and_then(|right_node_id| self.find_min_from(right_node_id))
     }
 
+    fn find_binary_replacement(&self, base_node_id: NodeId) -> DeleteSuccessor {
+        let base_node = self.get(base_node_id).unwrap();
+        let optional_left = base_node.as_inner().left;
+        let optional_right = base_node.as_inner().right;
+
+        match (optional_left, optional_right) {
+            (None, None) => DeleteSuccessor::None,
+            (Some(node_id), None) | (None, Some(node_id)) => DeleteSuccessor::Single(node_id),
+            (Some(_), Some(_)) => {
+                DeleteSuccessor::Double(self.find_in_order_successor_to(base_node_id))
+            }
+        }
+    }
+
+    fn set_child_node_to_id_if_exists(
+        &mut self,
+        optional_upstream: Option<NodeId>,
+        optional_new_child: Option<NodeId>,
+        direction: Direction,
+    ) -> Option<NodeId> {
+        optional_upstream.map(|id| {
+            let _ = self.get_mut(id).map(|upstream_node| match direction {
+                Direction::Left => upstream_node.as_inner_mut().left = optional_new_child,
+                Direction::Right => upstream_node.as_inner_mut().right = optional_new_child,
+            });
+            id
+        })
+    }
+
     pub fn delete(mut self, value: &V) -> Self {
         self.delete_mut(value);
         self
@@ -439,73 +480,66 @@ where
             .find_nearest_node(value)
             .hit_then(|matching_node| matching_node)?;
         let base_node_direction = self.get_direction_of_node(base_node_id);
+        let delete_successor = self.find_binary_replacement(base_node_id);
 
         // take the base node to handle for delete.
         let mut base_node = self.nodes[usize::from(base_node_id)].take()?;
         let optional_upstream_node_id = base_node.as_inner().parent;
-        let base_node_left_id = base_node.as_inner().left;
-        let base_node_right_id = base_node.as_inner().right;
 
-        // delete target must have less than 2 children.
-        if !(base_node_left_id.is_some() && base_node_right_id.is_some()) {
-            let new_base_node_id = base_node_left_id.or(base_node_right_id);
-            // set new base_nodes_new_parent.
-            new_base_node_id.and_then(|id| {
-                self.get_mut(id).map(|new_base_node| {
+        match delete_successor {
+            DeleteSuccessor::Double(successor) => {
+                // Should be safe to unwrap as this condition cannot be
+                // hit unless a right side is present.
+                let successor_node_id = successor?;
+                let optional_parent_to_successor_id = self
+                    .get_parent(successor_node_id)
+                    .map(|color_node| color_node.id())
+                    // make sure the parent isn't our node selected for deletion.
+                    .and_then(|parent_id| {
+                        if parent_id == base_node_id {
+                            Some(parent_id)
+                        } else {
+                            None
+                        }
+                    });
+
+                let optional_successor_node_right_id = self
+                    .get(successor_node_id)
+                    .and_then(|color_node| color_node.as_inner().right);
+
+                if let Some(parent_id) = optional_parent_to_successor_id {
+                    let mut parent_node = self.get_mut(parent_id)?.as_inner_mut();
+                    parent_node.left = optional_successor_node_right_id;
+                } else {
+                    base_node.as_inner_mut().right = optional_successor_node_right_id;
+                }
+
+                let mut successor_node = base_node;
+                let base_node = self.get_mut(base_node_id)?.as_inner_mut();
+                std::mem::swap(
+                    &mut base_node.inner,
+                    &mut successor_node.as_inner_mut().inner,
+                );
+
+                Some(base_node_id)
+            }
+            DeleteSuccessor::Single(child_id) => {
+                // set new base_nodes_new_parent.
+                let _ = self.get_mut(child_id).map(|new_base_node| {
                     new_base_node.as_inner_mut().parent = optional_upstream_node_id;
-                })
-            });
-
-            // set new child on upstream node..
-            optional_upstream_node_id.and_then(|id| {
-                self.get_mut(id)
-                    .map(|upstream_node| match base_node_direction {
-                        Some(Direction::Left) => {
-                            upstream_node.as_inner_mut().left = new_base_node_id
-                        }
-                        Some(Direction::Right) => {
-                            upstream_node.as_inner_mut().right = new_base_node_id
-                        }
-                        None => panic!("deletion of a node should always have a direction."),
-                    })
-            });
-
-            new_base_node_id.or(optional_upstream_node_id)
-        } else {
-            // Should be safe to unwrap as this condition cannot be
-            // hit unless a right side is present.
-            let successor_node_id = self.find_in_order_successor_to(base_node_id)?;
-            let optional_parent_to_successor_id = self
-                .get_parent(successor_node_id)
-                .map(|color_node| color_node.id())
-                // make sure the parent isn't our node selected for deletion.
-                .and_then(|parent_id| {
-                    if parent_id == base_node_id {
-                        Some(parent_id)
-                    } else {
-                        None
-                    }
                 });
 
-            let optional_successor_node_right_id = self
-                .get(successor_node_id)
-                .and_then(|color_node| color_node.as_inner().right);
+                base_node_direction.and_then(|direction| {
+                    self.set_child_node_to_id_if_exists(
+                        optional_upstream_node_id,
+                        Some(child_id),
+                        direction,
+                    )
+                });
 
-            if let Some(parent_id) = optional_parent_to_successor_id {
-                let mut parent_node = self.get_mut(parent_id)?.as_inner_mut();
-                parent_node.left = optional_successor_node_right_id;
-            } else {
-                base_node.as_inner_mut().right = optional_successor_node_right_id;
+                Some(child_id)
             }
-
-            let mut successor_node = base_node;
-            let base_node = self.get_mut(base_node_id)?.as_inner_mut();
-            std::mem::swap(
-                &mut base_node.inner,
-                &mut successor_node.as_inner_mut().inner,
-            );
-
-            Some(base_node_id)
+            DeleteSuccessor::None => optional_upstream_node_id,
         }
     }
 
