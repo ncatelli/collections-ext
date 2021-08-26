@@ -65,6 +65,12 @@ impl<V> Node<V> {
         self.parent.is_none()
     }
 
+    /// Returns a boolean signifying if the node is a leaf node (has no
+    /// children)
+    pub fn is_leaf(&self) -> bool {
+        self.left.is_none() && self.right.is_none()
+    }
+
     /// Returns the inner value of the Node.
     pub fn unwrap(self) -> V {
         self.inner
@@ -335,15 +341,14 @@ where
 
                 next_step
                     .break_value()
-                    .and_then(|last| {
-                        self.get(last).map(|last_color_node| {
-                            let last_node = last_color_node.as_inner();
-                            if value == &last_node.inner {
-                                SearchResult::Hit(last)
-                            } else {
-                                SearchResult::Miss(last)
-                            }
-                        })
+                    .and_then(|last| self.get(last))
+                    .map(|last_color_node| {
+                        let last_node = last_color_node.as_inner();
+                        if value == &last_node.inner {
+                            SearchResult::Hit(last_node.id)
+                        } else {
+                            SearchResult::Miss(last_node.id)
+                        }
                     })
                     // Unwraps should be safe. these will always exist.
                     .unwrap()
@@ -461,13 +466,15 @@ where
         optional_new_child: Option<NodeId>,
         direction: Direction,
     ) -> Option<NodeId> {
-        optional_upstream.map(|id| {
-            let _ = self.get_mut(id).map(|upstream_node| match direction {
-                Direction::Left => upstream_node.as_inner_mut().left = optional_new_child,
-                Direction::Right => upstream_node.as_inner_mut().right = optional_new_child,
-            });
-            id
-        })
+        optional_upstream
+            .and_then(|id| self.get_mut(id))
+            .map(|upstream_node| {
+                match direction {
+                    Direction::Left => upstream_node.as_inner_mut().left = optional_new_child,
+                    Direction::Right => upstream_node.as_inner_mut().right = optional_new_child,
+                };
+                upstream_node.id()
+            })
     }
 
     pub fn delete(mut self, value: &V) -> Self {
@@ -776,11 +783,9 @@ where
     /// Retrieves a the parent of a Node, Optionally returning a reference to
     /// the parent Node if it exists.
     fn get_parent(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.get(id).and_then(|node| {
-            node.as_inner()
-                .parent
-                .and_then(|parent_id| self.get(parent_id))
-        })
+        self.get(id)
+            .and_then(|node| node.as_inner().parent)
+            .and_then(|parent_id| self.get(parent_id))
     }
 
     /// Retrieves a the parent of a Node, Optionally returning a mutable
@@ -795,11 +800,9 @@ where
     /// Retrieves the parent of a Node's parent, Optionally returning a
     /// reference to the grandparent Node if it exists.
     fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.get_parent(id).and_then(|node| {
-            node.as_inner()
-                .parent
-                .and_then(|parent_id| self.get(parent_id))
-        })
+        self.get_parent(id)
+            .and_then(|node| node.as_inner().parent)
+            .and_then(|parent_id| self.get(parent_id))
     }
 
     /// Retrieves the uncle of a Node, Optionally returning a reference to the
@@ -815,10 +818,11 @@ where
         self.get_parent(id)
             .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
                 // return any leaf that doesn't match the original id or none.
-                (Some(leaf_id), _) if leaf_id != id => self.get(leaf_id),
-                (_, Some(leaf_id)) if leaf_id != id => self.get(leaf_id),
+                (Some(leaf_id), _) if leaf_id != id => Some(leaf_id),
+                (_, Some(leaf_id)) if leaf_id != id => Some(leaf_id),
                 _ => None,
             })
+            .and_then(|id| self.get(id))
     }
 
     /// Retrieves the close nephew of a Node, Optionally returning a reference
