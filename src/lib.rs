@@ -663,8 +663,8 @@ where
             let z_inner = z_node.as_inner_mut();
             z_inner.parent = optional_upstream_parent_id;
             match direction {
-                Direction::Left => z_inner.left = Some(x_id),
-                Direction::Right => z_inner.right = Some(x_id),
+                Direction::Left => z_inner.left.replace(x_id),
+                Direction::Right => z_inner.right.replace(x_id),
             }
         });
 
@@ -675,17 +675,13 @@ where
             x_inner.parent = Some(z_id);
             match direction {
                 Direction::Left => x_inner.right = y_id,
-
                 Direction::Right => x_inner.left = y_id,
             }
         });
 
         // if y exists, set its parent to x.
-        y_id.and_then(|id| {
-            self.get_mut(id).map(|y_node| {
-                y_node.as_inner_mut().parent = Some(x_id);
-            })
-        });
+        y_id.and_then(|id| self.get_mut(id))
+            .map(|y_node| y_node.as_inner_mut().parent.replace(x_id));
 
         Some(z_id)
     }
