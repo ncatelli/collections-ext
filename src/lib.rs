@@ -258,6 +258,15 @@ enum DeleteSuccessor {
     None,
 }
 
+/// Represents one of two actions that can trigger a rebalance/modification.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Operation {
+    /// A new node has been inserted into the tree.
+    Insert,
+    /// A node has been removed from the tree.
+    Delete,
+}
+
 /// An implementation of a Red-Black Tree
 #[derive(Debug, Default, Clone)]
 pub struct RedBlackTree<V> {
@@ -432,7 +441,7 @@ where
                     ))));
 
                     // rebalance the tree after a new insertions
-                    self.rebalance_mut(next_id);
+                    self.rebalance_mut(next_id, Operation::Insert);
                     None
                 }
             }
@@ -532,9 +541,20 @@ where
             }
             DeleteSuccessor::Single(child_id) => {
                 // set new base_nodes_new_parent.
-                let _ = self.get_mut(child_id).map(|new_base_node| {
-                    new_base_node.as_inner_mut().parent = optional_upstream_node_id;
-                });
+                let _balance_resolved = self
+                    .get_mut(child_id)
+                    .map(|new_base_node| {
+                        new_base_node.as_inner_mut().parent = optional_upstream_node_id;
+                        new_base_node
+                    })
+                    .and_then(|successor| {
+                        if successor.color() == Color::Red || base_node.color() == Color::Red {
+                            successor.flip_color_mut();
+                            None
+                        } else {
+                            Some(successor.id())
+                        }
+                    });
 
                 base_node_direction.and_then(|direction| {
                     self.set_child_node_to_id_if_exists(
@@ -550,8 +570,12 @@ where
         }
     }
 
-    fn rebalance_mut(&mut self, node_id: NodeId) {
-        let mut next_step = self.needs_rebalance_after_insertion(node_id);
+    fn rebalance_mut(&mut self, node_id: NodeId, action: Operation) {
+        let mut next_step = match action {
+            Operation::Insert => self.needs_rebalance_after_insertion(node_id),
+            Operation::Delete => self.needs_rebalance_after_deletion(node_id),
+        };
+
         while let Some(step) = next_step {
             next_step = None;
             match step {
@@ -567,7 +591,7 @@ where
                 Rebalance::RightLeft => {
                     self.handle_rl_mut(node_id);
                 }
-                Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id),
+                Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id, action),
             }
         }
     }
@@ -605,6 +629,10 @@ where
         } else {
             None
         }
+    }
+
+    fn needs_rebalance_after_deletion(&self, _base_node_id: NodeId) -> Option<Rebalance> {
+        todo!()
     }
 
     /// Rotates left from a root node, returning the new root NodeId.
@@ -687,7 +715,15 @@ where
     }
 
     #[allow(clippy::redundant_closure)]
-    fn recolor_mut(&mut self, base_id: NodeId) -> Option<Rebalance> {
+    fn recolor_mut(&mut self, base_id: NodeId, action: Operation) -> Option<Rebalance> {
+        match action {
+            Operation::Insert => self.recolor_on_insertion_mut(base_id),
+            Operation::Delete => todo!(),
+        }
+    }
+
+    #[allow(clippy::redundant_closure)]
+    fn recolor_on_insertion_mut(&mut self, base_id: NodeId) -> Option<Rebalance> {
         // set parent to black and return the id
         let parent_id = self.get_parent_mut(base_id).map(|parent_node| {
             parent_node.set_color_mut(Color::Black);
