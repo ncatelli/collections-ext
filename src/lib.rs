@@ -78,7 +78,7 @@ impl<V> Node<V> {
 }
 
 /// An enumerable value representing the available colors of a node.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     Red,
     Black,
@@ -541,7 +541,7 @@ where
             }
             DeleteSuccessor::Single(child_id) => {
                 // set new base_nodes_new_parent.
-                let _balance_resolved = self
+                let balance_unresolved = self
                     .get_mut(child_id)
                     .map(|new_base_node| {
                         new_base_node.as_inner_mut().parent = optional_upstream_node_id;
@@ -564,7 +564,12 @@ where
                     )
                 });
 
-                Some(child_id)
+                if let Some(successor) = balance_unresolved {
+                    self.rebalance_mut(successor, Operation::Delete);
+                    Some(successor)
+                } else {
+                    Some(child_id)
+                }
             }
             DeleteSuccessor::None => optional_upstream_node_id,
         }
@@ -631,8 +636,61 @@ where
         }
     }
 
-    fn needs_rebalance_after_deletion(&self, _base_node_id: NodeId) -> Option<Rebalance> {
-        todo!()
+    /// Check the balance of a tree starting from a given base_node_id, If the
+    /// tree is balanced, `None` is returned otherwise `Some(Rebalance)` is
+    /// returned containing the next rebalance operation.
+    fn needs_rebalance_after_deletion(&self, base_node_id: NodeId) -> Option<Rebalance> {
+        // short-circuit to none if the base is root.
+        let (optional_sibling_id, sibling_color) = self
+            .get_sibling(base_node_id)
+            .map(|sibling_color_node| (Some(sibling_color_node.id()), sibling_color_node.color()))
+            .unwrap_or_else(|| (None, Color::Black));
+
+        let distant_nephew_color = self
+            .get_distant_nephew(base_node_id)
+            .map(|distant_nephew_color_node| distant_nephew_color_node.color())
+            .unwrap_or(Color::Black);
+        let close_nephew_color = self
+            .get_close_nephew(base_node_id)
+            .map(|distant_nephew_color_node| distant_nephew_color_node.color())
+            .unwrap_or(Color::Black);
+        let optional_sibling_direction =
+            optional_sibling_id.and_then(|sibling_id| self.get_direction_of_node(sibling_id));
+        let (left_nephew_color, right_nephew_color) = optional_sibling_direction
+            .map(|sibling_direction| match sibling_direction {
+                Direction::Left => (distant_nephew_color, close_nephew_color),
+                Direction::Right => (close_nephew_color, distant_nephew_color),
+            })
+            .unwrap_or((Color::Black, Color::Black));
+
+        let sibling_has_red_child =
+            left_nephew_color == Color::Black || right_nephew_color == Color::Black;
+
+        if sibling_color == Color::Black && sibling_has_red_child {
+            // safe to unwrap
+            let sibling_id = optional_sibling_id.unwrap();
+            // safe to unwrap. if there is a sibling... there is a parent.
+            let _parent_of_sibling_id = self
+                .get_parent(sibling_id)
+                .map(|color_node| color_node.id())
+                .unwrap();
+            let sibling_direction = self.get_direction_of_node(sibling_id);
+            let optional_red_child_direction = match (left_nephew_color, right_nephew_color) {
+                (Color::Black, Color::Black) => None,
+                (Color::Black, Color::Red) => Some(Direction::Right),
+                (Color::Red, Color::Black) | (Color::Red, Color::Red) => Some(Direction::Left),
+            };
+
+            match (sibling_direction, optional_red_child_direction) {
+                (None, _) | (_, None) => None,
+                (Some(Direction::Left), Some(Direction::Left)) => Some(Rebalance::LeftLeft),
+                (Some(Direction::Left), Some(Direction::Right)) => Some(Rebalance::LeftRight),
+                (Some(Direction::Right), Some(Direction::Left)) => Some(Rebalance::RightLeft),
+                (Some(Direction::Right), Some(Direction::Right)) => Some(Rebalance::RightRight),
+            }
+        } else {
+            None
+        }
     }
 
     /// Rotates left from a root node, returning the new root NodeId.
