@@ -204,59 +204,6 @@ where
             }
         };
     }
-
-    /*
-    /// Inserts a value into the tree. if the value already exists,
-    /// Some(NodeId) to the already defined value is returned. Otherwise None
-    /// is returned.
-    pub fn insert_mut(&mut self, value: V) -> Option<NodeId> {
-        let next_id = NodeId::from(self.nodes.len());
-
-        match self.find_nearest_node(&value) {
-            SearchResult::Hit(node) => Some(node),
-            SearchResult::Empty => {
-                self.root = Some(next_id);
-                self.nodes.push(Some(ColorNode::Black(Node::new(
-                    next_id, value, None, None, None,
-                ))));
-                None
-            }
-            SearchResult::Miss(parent_node_id) => {
-                let is_defined = match self.get_mut(parent_node_id) {
-                    Some(parent_color_node) => {
-                        let parent_inner = parent_color_node.as_inner_mut();
-
-                        if value < parent_inner.inner {
-                            parent_inner.left = Some(next_id);
-                            None
-                        } else if value > parent_inner.inner {
-                            parent_inner.right = Some(next_id);
-                            None
-                        } else {
-                            Some(parent_inner.id)
-                        }
-                    }
-                    None => None,
-                };
-
-                if is_defined.is_some() {
-                    is_defined
-                } else {
-                    self.nodes.push(Some(ColorNode::Red(Node::new(
-                        next_id,
-                        value,
-                        Some(parent_node_id),
-                        None,
-                        None,
-                    ))));
-
-                    // rebalance the tree after a new insertions
-                    self.rebalance_mut(next_id, Operation::Insert);
-                    None
-                }
-            }
-        }
-    }*/
 }
 
 impl<V> Default for RedBlackTree<V> {
