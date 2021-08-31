@@ -246,6 +246,7 @@ impl ControlFlowState {
     }
 }
 
+/*
 /// Represents the three possible situations that a node can encounter on a delete,
 #[derive(Clone, Copy, PartialEq)]
 enum DeleteSuccessor {
@@ -257,14 +258,17 @@ enum DeleteSuccessor {
     /// Can be deleted directly.
     None,
 }
+*/
 
 /// Represents one of two actions that can trigger a rebalance/modification.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Operation {
     /// A new node has been inserted into the tree.
     Insert,
+    /*
     /// A node has been removed from the tree.
     Delete,
+    */
 }
 
 /// An implementation of a Red-Black Tree
@@ -448,137 +452,9 @@ where
         }
     }
 
-    /// Returns the minimum value node tot he right of the base_node.
-    fn find_in_order_successor_to(&self, base_node_id: NodeId) -> Option<NodeId> {
-        self.get(base_node_id)
-            .and_then(|base_color_node| base_color_node.as_inner().right)
-            .and_then(|right_node_id| self.find_min_from(right_node_id))
-    }
-
-    fn find_binary_replacement(&self, base_node_id: NodeId) -> DeleteSuccessor {
-        let base_node = self.get(base_node_id).unwrap();
-        let optional_left = base_node.as_inner().left;
-        let optional_right = base_node.as_inner().right;
-
-        match (optional_left, optional_right) {
-            (None, None) => DeleteSuccessor::None,
-            (Some(node_id), None) | (None, Some(node_id)) => DeleteSuccessor::Single(node_id),
-            (Some(_), Some(_)) => {
-                DeleteSuccessor::Double(self.find_in_order_successor_to(base_node_id))
-            }
-        }
-    }
-
-    fn set_child_node_to_id_if_exists(
-        &mut self,
-        optional_upstream: Option<NodeId>,
-        optional_new_child: Option<NodeId>,
-        direction: Direction,
-    ) -> Option<NodeId> {
-        optional_upstream
-            .and_then(|id| self.get_mut(id))
-            .map(|upstream_node| {
-                match direction {
-                    Direction::Left => upstream_node.as_inner_mut().left = optional_new_child,
-                    Direction::Right => upstream_node.as_inner_mut().right = optional_new_child,
-                };
-                upstream_node.id()
-            })
-    }
-
-    pub fn delete(mut self, value: &V) -> Self {
-        self.delete_mut(value);
-        self
-    }
-
-    pub fn delete_mut(&mut self, value: &V) -> Option<NodeId> {
-        let base_node_id = self
-            .find_nearest_node(value)
-            .hit_then(|matching_node| matching_node)?;
-        let base_node_direction = self.get_direction_of_node(base_node_id);
-        let delete_successor = self.find_binary_replacement(base_node_id);
-
-        // take the base node to handle for delete.
-        let mut base_node = self.nodes[usize::from(base_node_id)].take()?;
-        let optional_upstream_node_id = base_node.as_inner().parent;
-
-        match delete_successor {
-            DeleteSuccessor::Double(successor) => {
-                // Should be safe to unwrap as this condition cannot be
-                // hit unless a right side is present.
-                let successor_node_id = successor?;
-                let optional_parent_to_successor_id = self
-                    .get_parent(successor_node_id)
-                    .map(|color_node| color_node.id())
-                    // make sure the parent isn't our node selected for deletion.
-                    .and_then(|parent_id| {
-                        if parent_id == base_node_id {
-                            Some(parent_id)
-                        } else {
-                            None
-                        }
-                    });
-
-                let optional_successor_node_right_id = self
-                    .get(successor_node_id)
-                    .and_then(|color_node| color_node.as_inner().right);
-
-                if let Some(parent_id) = optional_parent_to_successor_id {
-                    let mut parent_node = self.get_mut(parent_id)?.as_inner_mut();
-                    parent_node.left = optional_successor_node_right_id;
-                } else {
-                    base_node.as_inner_mut().right = optional_successor_node_right_id;
-                }
-
-                let mut successor_node = base_node;
-                let base_node = self.get_mut(base_node_id)?.as_inner_mut();
-                std::mem::swap(
-                    &mut base_node.inner,
-                    &mut successor_node.as_inner_mut().inner,
-                );
-
-                Some(base_node_id)
-            }
-            DeleteSuccessor::Single(child_id) => {
-                // set new base_nodes_new_parent.
-                let balance_unresolved = self
-                    .get_mut(child_id)
-                    .map(|new_base_node| {
-                        new_base_node.as_inner_mut().parent = optional_upstream_node_id;
-                        new_base_node
-                    })
-                    .and_then(|successor| {
-                        if successor.color() == Color::Red || base_node.color() == Color::Red {
-                            successor.flip_color_mut();
-                            None
-                        } else {
-                            Some(successor.id())
-                        }
-                    });
-
-                base_node_direction.and_then(|direction| {
-                    self.set_child_node_to_id_if_exists(
-                        optional_upstream_node_id,
-                        Some(child_id),
-                        direction,
-                    )
-                });
-
-                if let Some(successor) = balance_unresolved {
-                    self.rebalance_mut(successor, Operation::Delete);
-                    Some(successor)
-                } else {
-                    Some(child_id)
-                }
-            }
-            DeleteSuccessor::None => optional_upstream_node_id,
-        }
-    }
-
     fn rebalance_mut(&mut self, node_id: NodeId, action: Operation) {
         let mut next_step = match action {
             Operation::Insert => self.needs_rebalance_after_insertion(node_id),
-            Operation::Delete => self.needs_rebalance_after_deletion(node_id),
         };
 
         while let Some(step) = next_step {
@@ -630,63 +506,6 @@ where
                     (Some(Direction::Right), Some(Direction::Left)) => Some(Rebalance::RightLeft),
                     (Some(Direction::Right), Some(Direction::Right)) => Some(Rebalance::RightRight),
                 }
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Check the balance of a tree starting from a given base_node_id, If the
-    /// tree is balanced, `None` is returned otherwise `Some(Rebalance)` is
-    /// returned containing the next rebalance operation.
-    fn needs_rebalance_after_deletion(&self, base_node_id: NodeId) -> Option<Rebalance> {
-        // short-circuit to none if the base is root.
-        let (optional_sibling_id, sibling_color) = self
-            .get_sibling(base_node_id)
-            .map(|sibling_color_node| (Some(sibling_color_node.id()), sibling_color_node.color()))
-            .unwrap_or_else(|| (None, Color::Black));
-
-        let distant_nephew_color = self
-            .get_distant_nephew(base_node_id)
-            .map(|distant_nephew_color_node| distant_nephew_color_node.color())
-            .unwrap_or(Color::Black);
-        let close_nephew_color = self
-            .get_close_nephew(base_node_id)
-            .map(|distant_nephew_color_node| distant_nephew_color_node.color())
-            .unwrap_or(Color::Black);
-        let optional_sibling_direction =
-            optional_sibling_id.and_then(|sibling_id| self.get_direction_of_node(sibling_id));
-        let (left_nephew_color, right_nephew_color) = optional_sibling_direction
-            .map(|sibling_direction| match sibling_direction {
-                Direction::Left => (distant_nephew_color, close_nephew_color),
-                Direction::Right => (close_nephew_color, distant_nephew_color),
-            })
-            .unwrap_or((Color::Black, Color::Black));
-
-        let sibling_has_red_child =
-            left_nephew_color == Color::Black || right_nephew_color == Color::Black;
-
-        if sibling_color == Color::Black && sibling_has_red_child {
-            // safe to unwrap
-            let sibling_id = optional_sibling_id.unwrap();
-            // safe to unwrap. if there is a sibling... there is a parent.
-            let _parent_of_sibling_id = self
-                .get_parent(sibling_id)
-                .map(|color_node| color_node.id())
-                .unwrap();
-            let sibling_direction = self.get_direction_of_node(sibling_id);
-            let optional_red_child_direction = match (left_nephew_color, right_nephew_color) {
-                (Color::Black, Color::Black) => None,
-                (Color::Black, Color::Red) => Some(Direction::Right),
-                (Color::Red, Color::Black) | (Color::Red, Color::Red) => Some(Direction::Left),
-            };
-
-            match (sibling_direction, optional_red_child_direction) {
-                (None, _) | (_, None) => None,
-                (Some(Direction::Left), Some(Direction::Left)) => Some(Rebalance::LeftLeft),
-                (Some(Direction::Left), Some(Direction::Right)) => Some(Rebalance::LeftRight),
-                (Some(Direction::Right), Some(Direction::Left)) => Some(Rebalance::RightLeft),
-                (Some(Direction::Right), Some(Direction::Right)) => Some(Rebalance::RightRight),
             }
         } else {
             None
@@ -776,7 +595,6 @@ where
     fn recolor_mut(&mut self, base_id: NodeId, action: Operation) -> Option<Rebalance> {
         match action {
             Operation::Insert => self.recolor_on_insertion_mut(base_id),
-            Operation::Delete => todo!(),
         }
     }
 
@@ -1240,17 +1058,5 @@ mod tests {
         let received: Vec<u16> = tree.traverse_in_order().copied().collect();
         let expected: Vec<u16> = (0..1024).collect();
         assert_eq!(expected, received);
-    }
-
-    #[test]
-    fn should_rearrange_tree_correctly_on_delete() {
-        let tree = vec![10, 5, 1]
-            .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
-
-        let modified_tree = tree.clone().delete(&1);
-        assert!(modified_tree.get(NodeId::from(2)).is_none());
-
-        assert_eq!(Some(NodeId::from(1)), tree.delete(&10).root);
     }
 }
