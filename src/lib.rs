@@ -1,5 +1,7 @@
 //! A naive implementation of a red-black tree for education purposes.
 
+mod ptr_rewrite;
+
 /// NodeId represents an Id for a node. This must be able to convert cleanly
 /// between a usize and
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
