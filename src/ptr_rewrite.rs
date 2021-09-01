@@ -1,6 +1,7 @@
-use core::borrow;
-use std::borrow::Borrow;
+use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
+
+type NodeRef<V> = NonNull<Node<V>>;
 
 /// Direction represents the directional branch that a given child is on for
 /// a given node.
@@ -21,7 +22,7 @@ enum Rebalance<V> {
     /// Represents a RightLeft case of inbalance.
     RightLeft,
     /// Contains the next base node for recoloring.
-    Recolor(Rc<Node<V>>),
+    Recolor(NodeRef<V>),
 }
 
 /// An enumerable value representing the available colors of a node.
@@ -40,9 +41,6 @@ impl Color {
     }
 }
 
-type WeakNodeRef<V> = Weak<Node<V>>;
-type NodeRef<V> = Rc<Node<V>>;
-
 /// Node represents an interior node to the Red-Black Tree, storing
 /// information about direct ancestor/descendent nodes as well as an inner
 /// value denoted by type V.
@@ -53,7 +51,7 @@ pub struct Node<V> {
     inner: V,
     /// An optional parent node. A value of None signifies that this node is
     /// the root.
-    parent: WeakNodeRef<V>,
+    parent: Option<NodeRef<V>>,
     /// An optional left-side direcitonaldescendant node.
     left: Option<NodeRef<V>>,
     /// An optional right-side direcitonaldescendant node.
@@ -67,7 +65,7 @@ where
     pub fn new(
         color: Color,
         inner: V,
-        parent: WeakNodeRef<V>,
+        parent: Option<NodeRef<V>>,
         left: Option<NodeRef<V>>,
         right: Option<NodeRef<V>>,
     ) -> Self {
@@ -82,13 +80,13 @@ where
 
     /// Returns a boolean signifying if this node is the root (has no parents)
     /// node.
-    pub fn is_root(&self) -> bool {
-        self.parent.borrow().upgrade().is_none()
+    fn is_root(&self) -> bool {
+        self.parent.is_none()
     }
 
     /// Returns a boolean signifying if the node is a leaf node (has no
     /// children)
-    pub fn is_leaf(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         self.left.is_none() && self.right.is_none()
     }
 
@@ -97,32 +95,32 @@ where
         self.inner
     }
 
-    pub fn direction(&self) -> Option<Direction> {
-        let parent = self.parent.borrow().upgrade()?;
+    unsafe fn direction(&self) -> Option<Direction> {
+        let parent = self.parent?.as_ref();
 
-        match &parent.left {
-            Some(left_node) if left_node.inner == self.inner => Some(Direction::Left),
+        match parent.left {
+            Some(left_node) if left_node.as_ref().inner == self.inner => Some(Direction::Left),
             _ => Some(Direction::Right),
         }
     }
 
-    pub fn sibling(&self) -> Option<NodeRef<V>> {
+    unsafe fn sibling(&self) -> Option<NodeRef<V>> {
         let direction = self.direction()?;
-        let parent = self.parent.upgrade()?;
+        let parent = self.parent?.as_ref();
 
         match direction {
-            Direction::Left => parent.right.clone(),
-            Direction::Right => parent.left.clone(),
+            Direction::Left => parent.right,
+            Direction::Right => parent.left,
         }
     }
 
-    pub fn grandparent(&self) -> Option<NodeRef<V>> {
-        let parent = self.parent.upgrade()?;
-        parent.parent.upgrade()
+    unsafe fn grandparent(&self) -> Option<NodeRef<V>> {
+        let parent = self.parent?.as_ref();
+        parent.parent
     }
 
-    pub fn uncle(&self) -> Option<NodeRef<V>> {
-        let parent = self.parent.upgrade()?;
+    unsafe fn uncle(&self) -> Option<NodeRef<V>> {
+        let parent = self.parent?.as_ref();
         parent.sibling()
     }
 }
@@ -132,10 +130,10 @@ where
 enum SearchResult<V> {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
-    Hit(Rc<Node<V>>),
+    Hit(NodeRef<V>),
     /// Miss represents the value was not found in the tree and represents the
     /// nearest parent node.
-    Miss(Rc<Node<V>>),
+    Miss(NodeRef<V>),
     /// Empty represents an empty tree.
     Empty,
 }
@@ -145,7 +143,7 @@ impl<V> SearchResult<V> {
     /// `f` wrapped in `Some` otherwise `None` is returned.
     fn hit_then<F, B>(self, f: F) -> Option<B>
     where
-        F: Fn(Rc<Node<V>>) -> B,
+        F: Fn(NodeRef<V>) -> B,
     {
         match self {
             SearchResult::Hit(node) => Some(f(node)),
@@ -165,15 +163,10 @@ where
     V: PartialEq,
 {
     pub fn new(root: V) -> Self {
-        Self {
-            root: Some(Rc::new(Node::new(
-                Color::Black,
-                root,
-                Weak::new(),
-                None,
-                None,
-            ))),
-        }
+        let boxed_node = Box::new(Node::new(Color::Black, root, None, None, None));
+        let root_ptr = NonNull::new(Box::into_raw(boxed_node));
+
+        Self { root: root_ptr }
     }
 }
 
@@ -189,15 +182,15 @@ where
 
     /// Searches for a value in the tree returning a SearchResult that
     /// captures if the search yield a hit, miss or empty tree.  
-    fn find_nearest_node(&self, value: &V) -> SearchResult<V> {
-        if let Some(root) = &self.root {
-            let mut next_step = root.clone();
+    unsafe fn find_nearest_node(&self, value: &V) -> SearchResult<V> {
+        if let Some(root) = self.root {
+            let mut next_step = root;
             loop {
-                if value == &next_step.inner {
-                    return SearchResult::Hit(next_step.clone());
-                } else if value <= &next_step.inner {
+                if value == &next_step.as_ref().inner {
+                    return SearchResult::Hit(next_step);
+                } else if value <= &next_step.as_ref().inner {
                     // if left leaf exists follow that direction.
-                    match &next_step.left {
+                    match &next_step.as_ref().left {
                         Some(left) => {
                             let left = left.clone();
                             next_step = left
@@ -207,7 +200,7 @@ where
                     }
                 } else {
                     // if right leaf exists follow that direction.
-                    match &next_step.right {
+                    match &next_step.as_ref().right {
                         Some(right) => {
                             let right = right.clone();
                             next_step = right
@@ -228,35 +221,26 @@ where
     }
 
     pub fn insert_mut(&mut self, value: V) {
-        match self.find_nearest_node(&value) {
+        unsafe { self.insert_mut_unchecked(value) }
+    }
+
+    unsafe fn insert_mut_unchecked(&mut self, value: V) {
+        let nearest = unsafe { self.find_nearest_node(&value) };
+        match nearest {
             SearchResult::Hit(_) => (),
             SearchResult::Empty => {
-                self.root = Some(Rc::new(Node::new(
-                    Color::Black,
-                    value,
-                    Weak::new(),
-                    None,
-                    None,
-                )));
+                let boxed_node = Box::new(Node::new(Color::Black, value, None, None, None));
+                self.root = NonNull::new(Box::into_raw(boxed_node));
             }
             SearchResult::Miss(mut parent_node) => {
-                let is_left = value < parent_node.inner;
-                let child = Rc::new(Node::new(
-                    Color::Red,
-                    value,
-                    Rc::downgrade(&parent_node),
-                    None,
-                    None,
-                ));
-
+                let is_left = &value < unsafe { &parent_node.as_ref().inner };
+                let boxed_child =
+                    Box::new(Node::new(Color::Red, value, Some(parent_node), None, None));
+                let child_ptr = NonNull::new(Box::into_raw(boxed_child));
                 if is_left {
-                    let _ =
-                        Rc::get_mut(&mut parent_node).map(|node| node.left = Some(child.clone()));
-                    //self.rebalance_mut(child, Operation::Insert);
+                    unsafe { parent_node.as_mut().left = child_ptr };
                 } else {
-                    let _ =
-                        Rc::get_mut(&mut parent_node).map(|node| node.right = Some(child.clone()));
-                    //self.rebalance_mut(child, Operation::Insert);
+                    unsafe { parent_node.as_mut().right = child_ptr };
                 }
             }
         };
@@ -286,7 +270,7 @@ where
                 Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id, action),
             }
         }
-    }*/
+    }
 
     fn needs_rebalance_after_insertion(&self, base_node: NodeRef<V>) -> Option<Rebalance<V>> {
         // short-circuit to none if the base is root.
@@ -387,7 +371,7 @@ where
         Some(z)
     }
 
-    /*
+
     #[allow(clippy::redundant_closure)]
     fn recolor_mut(&mut self, base_id: NodeId, action: Operation) -> Option<Rebalance> {
         match action {
