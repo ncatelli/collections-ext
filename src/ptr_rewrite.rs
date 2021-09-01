@@ -225,7 +225,7 @@ where
     }
 
     unsafe fn insert_mut_unchecked(&mut self, value: V) {
-        let nearest = unsafe { self.find_nearest_node(&value) };
+        let nearest = self.find_nearest_node(&value);
         match nearest {
             SearchResult::Hit(_) => (),
             SearchResult::Empty => {
@@ -233,14 +233,14 @@ where
                 self.root = NonNull::new(Box::into_raw(boxed_node));
             }
             SearchResult::Miss(mut parent_node) => {
-                let is_left = &value < unsafe { &parent_node.as_ref().inner };
+                let is_left = value < parent_node.as_ref().inner;
                 let boxed_child =
                     Box::new(Node::new(Color::Red, value, Some(parent_node), None, None));
                 let child_ptr = NonNull::new(Box::into_raw(boxed_child));
                 if is_left {
-                    unsafe { parent_node.as_mut().left = child_ptr };
+                    parent_node.as_mut().left = child_ptr;
                 } else {
-                    unsafe { parent_node.as_mut().right = child_ptr };
+                    parent_node.as_mut().right = child_ptr;
                 }
             }
         };
