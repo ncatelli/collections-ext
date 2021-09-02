@@ -248,6 +248,23 @@ where
         };
     }
 
+    pub fn remove(mut self, value: &V) -> Self {
+        self.remove_mut(value);
+        self
+    }
+
+    pub fn remove_mut(&mut self, value: &V) -> Option<V> {
+        unsafe { self.remove_mut_unchecked(value) }
+    }
+
+    unsafe fn remove_mut_unchecked(&mut self, value: &V) -> Option<V> {
+        if let SearchResult::Hit(_node) = self.find_nearest_node(value) {
+            todo!()
+        } else {
+            None
+        }
+    }
+
     unsafe fn rebalance_mut(&mut self, node: NodeRef<V>, action: Operation) {
         let mut next_step = match action {
             Operation::Insert => self.needs_rebalance_after_insertion(node),
