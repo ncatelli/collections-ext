@@ -5,7 +5,7 @@ type NodeRef<V> = NonNull<Node<V>>;
 /// Direction represents the directional branch that a given child is on for
 /// a given node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
+enum Direction {
     Left,
     Right,
 }
@@ -47,13 +47,13 @@ enum Rebalance<V> {
 
 /// An enumerable value representing the available colors of a node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Color {
+enum Color {
     Red,
     Black,
 }
 
 impl Color {
-    pub fn flip(self) -> Self {
+    fn flip(self) -> Self {
         match self {
             Self::Black => Self::Red,
             Self::Red => Self::Black,
@@ -65,7 +65,7 @@ impl Color {
 /// information about direct ancestor/descendent nodes as well as an inner
 /// value denoted by type V.
 #[derive(Debug, Clone)]
-pub struct Node<V> {
+struct Node<V> {
     color: Color,
     /// An inner value stored in the tree.
     inner: V,
@@ -82,7 +82,7 @@ impl<V> Node<V>
 where
     V: PartialEq,
 {
-    pub fn new(
+    fn new(
         color: Color,
         inner: V,
         parent: Option<NodeRef<V>>,
@@ -96,11 +96,6 @@ where
             left,
             right,
         }
-    }
-
-    /// Returns the inner value of the Node.
-    pub fn unwrap(self) -> V {
-        self.inner
     }
 
     unsafe fn direction(&self) -> Option<Direction> {
