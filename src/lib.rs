@@ -1,82 +1,48 @@
-//! A naive implementation of a red-black tree for education purposes.
+use std::ptr::NonNull;
 
-mod ptr_rewrite;
+type NodeRef<V> = NonNull<Node<V>>;
 
-/// NodeId represents an Id for a node. This must be able to convert cleanly
-/// between a usize and
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct NodeId(usize);
-
-impl NodeId {
-    /// Instantiates a NodeId from a usize value.
-    pub fn new(inner: usize) -> Self {
-        Self(inner)
-    }
+/// Direction represents the directional branch that a given child is on for
+/// a given node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Left,
+    Right,
 }
 
-impl From<usize> for NodeId {
-    fn from(id: usize) -> Self {
-        Self::new(id)
-    }
+/// Represents one of two actions that can trigger a rebalance/modification.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Operation {
+    /// A new node has been inserted into the tree.
+    Insert,
+    /// A node has been removed from the tree.
+    Delete,
 }
 
-impl From<NodeId> for usize {
-    fn from(node_id: NodeId) -> Self {
-        node_id.0
-    }
+/// Represents the three possible situations that a node can encounter on a delete,
+#[derive(Clone, Copy, PartialEq)]
+enum DeleteSuccessor<V> {
+    /// Node has two children. Return the in-order successor.
+    Double(Option<NodeRef<V>>),
+    /// Node has a single child.
+    Single(NodeRef<V>),
+    /// Node has no children (is a leaf or root).
+    /// Can be deleted directly.
+    None,
 }
 
-/// Node represents an interior node to the Red-Black Tree, storing
-/// information about direct ancestor/descendent nodes as well as an inner
-/// value denoted by type V.
-#[derive(Default, Debug, Clone)]
-pub struct Node<V> {
-    /// A unique identifier for the node
-    id: NodeId,
-    /// An inner value stored in the tree.
-    inner: V,
-    /// An optional parent node. A value of None signifies that this node is
-    /// the root.
-    parent: Option<NodeId>,
-    /// An optional left-side direcitonaldescendant node.
-    left: Option<NodeId>,
-    /// An optional right-side direcitonaldescendant node.
-    right: Option<NodeId>,
-}
-
-impl<V> Node<V> {
-    pub fn new(
-        id: NodeId,
-        inner: V,
-        parent: Option<NodeId>,
-        left: Option<NodeId>,
-        right: Option<NodeId>,
-    ) -> Self {
-        Self {
-            id,
-            inner,
-            parent,
-            left,
-            right,
-        }
-    }
-
-    /// Returns a boolean signifying if this node is the root (has no parents)
-    /// node.
-    pub fn is_root(&self) -> bool {
-        self.parent.is_none()
-    }
-
-    /// Returns a boolean signifying if the node is a leaf node (has no
-    /// children)
-    pub fn is_leaf(&self) -> bool {
-        self.left.is_none() && self.right.is_none()
-    }
-
-    /// Returns the inner value of the Node.
-    pub fn unwrap(self) -> V {
-        self.inner
-    }
+/// Rebalance captures the states of rebalance operation.
+enum Rebalance<V> {
+    /// Represents a LeftLeft case of inbalance.
+    LeftLeft,
+    /// Represents a LeftRight case of inbalance.
+    LeftRight,
+    /// Represents a RightRight case of inbalance.
+    RightRight,
+    /// Represents a RightLeft case of inbalance.
+    RightLeft,
+    /// Contains the next base node for recoloring.
+    Recolor(NodeRef<V>),
 }
 
 /// An enumerable value representing the available colors of a node.
@@ -95,418 +61,264 @@ impl Color {
     }
 }
 
-/// ColorNode wraps a node, with an optional Color value.
+/// Node represents an interior node to the Red-Black Tree, storing
+/// information about direct ancestor/descendent nodes as well as an inner
+/// value denoted by type V.
 #[derive(Debug, Clone)]
-pub enum ColorNode<V> {
-    Red(Node<V>),
-    Black(Node<V>),
+pub struct Node<V> {
+    color: Color,
+    /// An inner value stored in the tree.
+    inner: V,
+    /// An optional parent node. A value of None signifies that this node is
+    /// the root.
+    parent: Option<NodeRef<V>>,
+    /// An optional left-side direcitonaldescendant node.
+    left: Option<NodeRef<V>>,
+    /// An optional right-side direcitonaldescendant node.
+    right: Option<NodeRef<V>>,
 }
 
-impl<T> ColorNode<T>
+impl<V> Node<V>
 where
-    T: Default,
+    V: PartialEq,
 {
-    /// Returns the id of the enclosed node.
-    pub fn id(&self) -> NodeId {
-        self.as_inner().id
-    }
-
-    /// Borrows and returns the inner value of the node.
-    pub fn as_inner(&self) -> &Node<T> {
-        match self {
-            ColorNode::Red(inner) | ColorNode::Black(inner) => inner,
+    pub fn new(
+        color: Color,
+        inner: V,
+        parent: Option<NodeRef<V>>,
+        left: Option<NodeRef<V>>,
+        right: Option<NodeRef<V>>,
+    ) -> Self {
+        Self {
+            color,
+            inner,
+            parent,
+            left,
+            right,
         }
     }
 
-    /// Mutably borrows and returns the inner value of the node.
-    pub fn as_inner_mut(&mut self) -> &mut Node<T> {
-        match self {
-            ColorNode::Red(inner) | ColorNode::Black(inner) => inner,
+    /// Returns a boolean signifying if this node is the root (has no parents)
+    /// node.
+    fn is_root(&self) -> bool {
+        self.parent.is_none()
+    }
+
+    /// Returns a boolean signifying if the node is a leaf node (has no
+    /// children)
+    fn is_leaf(&self) -> bool {
+        self.left.is_none() && self.right.is_none()
+    }
+
+    /// Returns the inner value of the Node.
+    pub fn unwrap(self) -> V {
+        self.inner
+    }
+
+    unsafe fn direction(&self) -> Option<Direction> {
+        let parent = self.parent?.as_ref();
+
+        match parent.left {
+            Some(left_node) if left_node.as_ref().inner == self.inner => Some(Direction::Left),
+            _ => Some(Direction::Right),
         }
     }
 
-    /// Returns the inner value, `T` of the node, consuming the enclosing
-    /// `Node<T>`.
-    pub fn into_inner(self) -> Node<T> {
-        match self {
-            ColorNode::Red(inner) | ColorNode::Black(inner) => inner,
+    unsafe fn sibling(&self) -> Option<NodeRef<V>> {
+        let direction = self.direction()?;
+        let parent = self.parent?.as_ref();
+
+        match direction {
+            Direction::Left => parent.right,
+            Direction::Right => parent.left,
         }
     }
 
-    /// Inverts the color of a node, rewrapping the nodes inner value.
-    pub fn flip_color(mut self) -> Self {
-        self.flip_color_mut();
-        self
+    unsafe fn grandparent(&self) -> Option<NodeRef<V>> {
+        let parent = self.parent?.as_ref();
+        parent.parent
     }
 
-    /// Inverts the color of a node in place.
-    pub fn flip_color_mut(&mut self) {
-        match self {
-            ColorNode::Red(inner) => *self = Self::Black(std::mem::take(inner)),
-            ColorNode::Black(inner) => *self = Self::Red(std::mem::take(inner)),
-        }
+    unsafe fn uncle(&self) -> Option<NodeRef<V>> {
+        let parent = self.parent?.as_ref();
+        parent.sibling()
     }
-
-    /// Returns a node set to the color passed.
-    pub fn set_color(mut self, color: Color) -> Self {
-        self.set_color_mut(color);
-        self
-    }
-
-    /// Sets the color of a node to the specified color in place.
-    pub fn set_color_mut(&mut self, color: Color) {
-        match self {
-            ColorNode::Red(inner) | ColorNode::Black(inner) => {
-                *self = Self::from((color, std::mem::take(inner)))
-            }
-        }
-    }
-
-    /// Returns the Color of a node.
-    pub fn color(&self) -> Color {
-        match self {
-            Self::Red(_) => Color::Red,
-            Self::Black(_) => Color::Black,
-        }
-    }
-}
-
-impl<T> From<(Color, Node<T>)> for ColorNode<T> {
-    fn from((color, node): (Color, Node<T>)) -> Self {
-        match color {
-            Color::Red => ColorNode::Red(node),
-            Color::Black => ColorNode::Black(node),
-        }
-    }
-}
-
-/// Direction represents the directional branch that a given child is on for
-/// a given node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
-    Left,
-    Right,
-}
-
-/// Rebalance captures the states of rebalance operation.
-enum Rebalance {
-    /// Represents a LeftLeft case of inbalance.
-    LeftLeft,
-    /// Represents a LeftRight case of inbalance.
-    LeftRight,
-    /// Represents a RightRight case of inbalance.
-    RightRight,
-    /// Represents a RightLeft case of inbalance.
-    RightLeft,
-    /// Contains the next base node for recoloring.
-    Recolor(NodeId),
 }
 
 /// SearchResult represents the results of a binary tree search.
-#[derive(Debug, PartialEq, Eq)]
-enum SearchResult {
+#[derive(Debug)]
+enum SearchResult<V> {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
-    Hit(NodeId),
+    Hit(NodeRef<V>),
     /// Miss represents the value was not found in the tree and represents the
     /// nearest parent node.
-    Miss(NodeId),
+    Miss(NodeRef<V>),
     /// Empty represents an empty tree.
     Empty,
 }
 
-impl SearchResult {
+impl<V> SearchResult<V> {
     /// Calls `f` if the self is `SearchResult::Hit` returning the result of
     /// `f` wrapped in `Some` otherwise `None` is returned.
     fn hit_then<F, B>(self, f: F) -> Option<B>
     where
-        F: Fn(NodeId) -> B,
+        F: Fn(NodeRef<V>) -> B,
     {
         match self {
-            SearchResult::Hit(node_id) => Some(f(node_id)),
+            SearchResult::Hit(node) => Some(f(node)),
             _ => None,
         }
     }
-}
-
-/// Captures the state of a tree walk.
-enum ControlFlowState {
-    /// Continue encloses the next node to check for a match in a binary walk.
-    Continue(NodeId),
-    /// Signifies the end node in walk and that the walk should stop.
-    Break(NodeId),
-}
-
-impl ControlFlowState {
-    /// Unpacks a `ControlFlowState::Break` into an Option. Returning `None` if the
-    /// variant is not `Break`.
-    fn break_value(self) -> Option<NodeId> {
-        match self {
-            ControlFlowState::Break(inner) => Some(inner),
-            _ => None,
-        }
-    }
-}
-
-/*
-/// Represents the three possible situations that a node can encounter on a delete,
-#[derive(Clone, Copy, PartialEq)]
-enum DeleteSuccessor {
-    /// Node has two children. Return the in-order successor.
-    Double(Option<NodeId>),
-    /// Node has a single child.
-    Single(NodeId),
-    /// Node has no children (is a leaf or root).
-    /// Can be deleted directly.
-    None,
-}
-*/
-
-/// Represents one of two actions that can trigger a rebalance/modification.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Operation {
-    /// A new node has been inserted into the tree.
-    Insert,
-    /*
-    /// A node has been removed from the tree.
-    Delete,
-    */
 }
 
 /// An implementation of a Red-Black Tree
-#[derive(Debug, Default, Clone)]
-pub struct RedBlackTree<V> {
-    root: Option<NodeId>,
-    nodes: Vec<Option<ColorNode<V>>>,
+#[derive(Debug, Clone)]
+pub struct RedBlackTree<V>
+where
+    V: PartialEq + PartialOrd,
+{
+    root: Option<NodeRef<V>>,
 }
 
 impl<V> RedBlackTree<V>
 where
-    V: Default,
+    V: PartialEq + PartialOrd,
 {
-    /// Instantiates a new instance of RedBlackTree, making the first item in
-    /// the passed vector the root node.
-    pub fn new(nodes: Vec<Option<ColorNode<V>>>) -> Self {
-        match nodes.get(0) {
-            Some(Some(node_id)) => Self {
-                root: Some(node_id.as_inner().id),
-                nodes,
-            },
-            _ => Self { root: None, nodes },
-        }
-    }
+    pub fn new(root: V) -> Self {
+        let boxed_node = Box::new(Node::new(Color::Black, root, None, None, None));
+        let root_ptr = NonNull::new(Box::into_raw(boxed_node));
 
-    /// Returns a boolean representing if the tree is empty (root node is None).
+        Self { root: root_ptr }
+    }
+}
+
+// helper methods
+impl<V> RedBlackTree<V>
+where
+    V: PartialEq + PartialOrd,
+{
+    /// Returns a boolean representing if the tree is empty or not.
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
     }
-}
-
-impl<V> std::ops::Index<NodeId> for RedBlackTree<V> {
-    type Output = Option<ColorNode<V>>;
-
-    fn index(&self, idx: NodeId) -> &Self::Output {
-        &self.nodes[usize::from(idx)]
-    }
-}
-
-impl<V> std::ops::IndexMut<NodeId> for RedBlackTree<V> {
-    fn index_mut(&mut self, idx: NodeId) -> &mut Self::Output {
-        &mut self.nodes[usize::from(idx)]
-    }
-}
-
-/// Helper functions
-impl<V> RedBlackTree<V>
-where
-    V: PartialEq + PartialOrd + Default,
-{
-    /// Retrieves a Node by Id. If the Id exists in the tree, Some<&Node> is
-    /// returned. Otherwise None is returned.
-    pub fn get(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.nodes
-            .get(usize::from(id))
-            .and_then(|optional_color_node| optional_color_node.as_ref())
-    }
-
-    /// Retrieves a mutable Node by Id. If the Id exists in the tree,
-    /// Some<&mut Node> is returned. Otherwise None is returned.
-    pub fn get_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
-        self.nodes
-            .get_mut(usize::from(id))
-            .and_then(|optional_color_node| optional_color_node.as_mut())
-    }
 
     /// Searches for a value in the tree returning a SearchResult that
     /// captures if the search yield a hit, miss or empty tree.  
-    pub fn search(&self, value: &V) -> Option<NodeId> {
-        self.find_nearest_node(value).hit_then(|v| v)
-    }
-
-    /// Searches for a value in the tree returning a SearchResult that
-    /// captures if the search yield a hit, miss or empty tree.  
-    fn find_nearest_node(&self, value: &V) -> SearchResult {
-        self.root.map_or_else(
-            || SearchResult::Empty,
-            |root| {
-                let mut next_step = ControlFlowState::Continue(root);
-                while let ControlFlowState::Continue(next_id) = next_step {
-                    next_step = self.next_step(next_id, value);
-                }
-
-                next_step
-                    .break_value()
-                    .and_then(|last| self.get(last))
-                    .map(|last_color_node| {
-                        let last_node = last_color_node.as_inner();
-                        if value == &last_node.inner {
-                            SearchResult::Hit(last_node.id)
-                        } else {
-                            SearchResult::Miss(last_node.id)
+    unsafe fn find_nearest_node(&self, value: &V) -> SearchResult<V> {
+        if let Some(root) = self.root {
+            let mut next_step = root;
+            loop {
+                if value == &next_step.as_ref().inner {
+                    return SearchResult::Hit(next_step);
+                } else if value <= &next_step.as_ref().inner {
+                    // if left leaf exists follow that direction.
+                    match &next_step.as_ref().left {
+                        Some(left) => {
+                            let left = left.clone();
+                            next_step = left
                         }
-                    })
-                    // Unwraps should be safe. these will always exist.
-                    .unwrap()
-            },
-        )
-    }
-
-    /// Returns an option representing the next step in a tree walk. If `None`
-    /// is returned. There are no further steps to take. Otherwise the the
-    /// direction of the next step is returned.
-    fn next_step(&self, base_id: NodeId, value: &V) -> ControlFlowState {
-        // panic if no node.
-        let node = self.get(base_id).unwrap().as_inner();
-
-        if value == &node.inner {
-            ControlFlowState::Break(base_id)
-        } else if value < &node.inner {
-            // if left leaf exists follow that direction.
-            match node.left {
-                Some(next) => ControlFlowState::Continue(next),
-                None => ControlFlowState::Break(base_id),
+                        // return the parent
+                        None => return SearchResult::Miss(next_step),
+                    }
+                } else {
+                    // if right leaf exists follow that direction.
+                    match &next_step.as_ref().right {
+                        Some(right) => {
+                            let right = right.clone();
+                            next_step = right
+                        }
+                        // return the parent
+                        None => return SearchResult::Miss(next_step),
+                    }
+                }
             }
         } else {
-            // if right leaf exists follow that direction.
-            match node.right {
-                Some(next) => ControlFlowState::Continue(next),
-                None => ControlFlowState::Break(base_id),
-            }
+            SearchResult::Empty
         }
     }
 
-    /// Inserts a value into the tree, Returning the tree containing said value.
-    /// This will not reinsert the value if it already exists.
     pub fn insert(mut self, value: V) -> Self {
         self.insert_mut(value);
         self
     }
 
-    /// Inserts a value into the tree. if the value already exists,
-    /// Some(NodeId) to the already defined value is returned. Otherwise None
-    /// is returned.
-    pub fn insert_mut(&mut self, value: V) -> Option<NodeId> {
-        let next_id = NodeId::from(self.nodes.len());
-
-        match self.find_nearest_node(&value) {
-            SearchResult::Hit(node) => Some(node),
-            SearchResult::Empty => {
-                self.root = Some(next_id);
-                self.nodes.push(Some(ColorNode::Black(Node::new(
-                    next_id, value, None, None, None,
-                ))));
-                None
-            }
-            SearchResult::Miss(parent_node_id) => {
-                let is_defined = match self.get_mut(parent_node_id) {
-                    Some(parent_color_node) => {
-                        let parent_inner = parent_color_node.as_inner_mut();
-
-                        if value < parent_inner.inner {
-                            parent_inner.left = Some(next_id);
-                            None
-                        } else if value > parent_inner.inner {
-                            parent_inner.right = Some(next_id);
-                            None
-                        } else {
-                            Some(parent_inner.id)
-                        }
-                    }
-                    None => None,
-                };
-
-                if is_defined.is_some() {
-                    is_defined
-                } else {
-                    self.nodes.push(Some(ColorNode::Red(Node::new(
-                        next_id,
-                        value,
-                        Some(parent_node_id),
-                        None,
-                        None,
-                    ))));
-
-                    // rebalance the tree after a new insertions
-                    self.rebalance_mut(next_id, Operation::Insert);
-                    None
-                }
-            }
-        }
+    pub fn insert_mut(&mut self, value: V) {
+        unsafe { self.insert_mut_unchecked(value) }
     }
 
-    fn rebalance_mut(&mut self, node_id: NodeId, action: Operation) {
+    unsafe fn insert_mut_unchecked(&mut self, value: V) {
+        let nearest = self.find_nearest_node(&value);
+        match nearest {
+            SearchResult::Hit(_) => (),
+            SearchResult::Empty => {
+                let boxed_node = Box::new(Node::new(Color::Black, value, None, None, None));
+                self.root = NonNull::new(Box::into_raw(boxed_node));
+            }
+            SearchResult::Miss(mut parent_node) => {
+                let is_left = value < parent_node.as_ref().inner;
+                let boxed_child =
+                    Box::new(Node::new(Color::Red, value, Some(parent_node), None, None));
+                let child_ptr = NonNull::new(Box::into_raw(boxed_child));
+                if is_left {
+                    parent_node.as_mut().left = child_ptr;
+                } else {
+                    parent_node.as_mut().right = child_ptr;
+                }
+
+                self.rebalance_mut(child_ptr.unwrap(), Operation::Insert)
+            }
+        };
+    }
+
+    unsafe fn rebalance_mut(&mut self, node: NodeRef<V>, action: Operation) {
         let mut next_step = match action {
-            Operation::Insert => self.needs_rebalance_after_insertion(node_id),
+            Operation::Insert => self.needs_rebalance_after_insertion(node),
+            Operation::Delete => todo!(),
         };
 
         while let Some(step) = next_step {
             next_step = None;
             match step {
                 Rebalance::LeftLeft => {
-                    self.handle_ll_mut(node_id);
+                    self.handle_ll_mut(node);
                 }
                 Rebalance::LeftRight => {
-                    self.handle_lr_mut(node_id);
+                    self.handle_lr_mut(node);
                 }
                 Rebalance::RightRight => {
-                    self.handle_rr_mut(node_id);
+                    self.handle_rr_mut(node);
                 }
                 Rebalance::RightLeft => {
-                    self.handle_rl_mut(node_id);
+                    self.handle_rl_mut(node);
                 }
                 Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id, action),
             }
         }
     }
 
-    /// Check the balance of the tree starting from `base_node_id`, if the
-    /// tree is balanced, `None` is returned otherwise `Some(Rebalance)` is
-    /// returned containing the next rebalancing operation.
-    fn needs_rebalance_after_insertion(&self, base_node_id: NodeId) -> Option<Rebalance> {
+    unsafe fn needs_rebalance_after_insertion(
+        &self,
+        base_node: NodeRef<V>,
+    ) -> Option<Rebalance<V>> {
         // short-circuit to none if the base is root.
-        let (parent_id, parent_color) = self
-            .get_parent(base_node_id)
-            .map(|parent_color_node| (parent_color_node.id(), parent_color_node.color()))?;
-        let (optional_uncle_id, uncle_color) = self
-            .get_uncle(base_node_id)
-            .map(|uncle_color_node| (Some(uncle_color_node.id()), uncle_color_node.color()))
-            .unwrap_or_else(|| (None, Color::Black));
+        let base = base_node.as_ref();
+        let base_node_direction = base.direction()?;
+        let parent = base.parent?.as_ref();
+        let parent_direction = parent.direction()?;
+        let uncle_color = base
+            .uncle()
+            .map_or(Color::Black, |uncle| uncle.as_ref().color);
 
-        if parent_color == Color::Red {
-            if let (Some(_), Color::Red) = (optional_uncle_id, uncle_color) {
-                Some(Rebalance::Recolor(base_node_id))
+        if parent.color == Color::Red {
+            if uncle_color == Color::Red {
+                Some(Rebalance::Recolor(base_node))
             } else {
-                let base_direction = self.get_direction_of_node(base_node_id);
-                let optional_parent_direction = self.get_direction_of_node(parent_id);
-
-                match (optional_parent_direction, base_direction) {
-                    // It's not a rotation situation if there is
-                    // no grandparent. So short-circuit.
-                    (None, _) | (_, None) => None,
-                    (Some(Direction::Left), Some(Direction::Left)) => Some(Rebalance::LeftLeft),
-                    (Some(Direction::Left), Some(Direction::Right)) => Some(Rebalance::LeftRight),
-                    (Some(Direction::Right), Some(Direction::Left)) => Some(Rebalance::RightLeft),
-                    (Some(Direction::Right), Some(Direction::Right)) => Some(Rebalance::RightRight),
+                match (parent_direction, base_node_direction) {
+                    (Direction::Left, Direction::Left) => Some(Rebalance::LeftLeft),
+                    (Direction::Left, Direction::Right) => Some(Rebalance::LeftRight),
+                    (Direction::Right, Direction::Left) => Some(Rebalance::RightLeft),
+                    (Direction::Right, Direction::Right) => Some(Rebalance::RightRight),
                 }
             }
         } else {
@@ -520,299 +332,199 @@ where
     ///    z --->  x
     ///     \       \
     ///      y       y
-    fn rotate_left_mut(&mut self, x_id: NodeId) -> Option<NodeId> {
-        self.rotate_mut(x_id, Direction::Left)
+    unsafe fn rotate_left_mut(&mut self, x: NodeRef<V>) -> Option<NodeRef<V>> {
+        self.rotate_mut(x, Direction::Left)
     }
 
     /// Rotates right from a root node, returning the new root NodeId.
-    ///      x  z    
+    ///      x  z
     ///     /     \
     ///    z --->   x
     ///   /        /
     ///  y        y
-    fn rotate_right_mut(&mut self, x_id: NodeId) -> Option<NodeId> {
-        self.rotate_mut(x_id, Direction::Right)
+    unsafe fn rotate_right_mut(&mut self, x: NodeRef<V>) -> Option<NodeRef<V>> {
+        self.rotate_mut(x, Direction::Right)
     }
 
     /// Rotates a node by a passed direction
-    fn rotate_mut(&mut self, x_id: NodeId, direction: Direction) -> Option<NodeId> {
+    unsafe fn rotate_mut(
+        &mut self,
+        mut x_node_ref: NodeRef<V>,
+        direction: Direction,
+    ) -> Option<NodeRef<V>> {
+        let x = x_node_ref.as_mut();
+
         // if z or x aren't set return None
-        self.get(x_id)?;
-        let z_id = self.get(x_id).and_then(|x_color_node| match direction {
-            Direction::Left => x_color_node.as_inner().right,
-            Direction::Right => x_color_node.as_inner().left,
-        })?;
-        let y_id = self.get(z_id).and_then(|z_color_node| match direction {
-            Direction::Left => z_color_node.as_inner().left,
-            Direction::Right => z_color_node.as_inner().right,
-        });
+        let mut z = match direction {
+            Direction::Left => x.right.take(),
+            Direction::Right => x.left.take(),
+        }?;
 
-        let optional_upstream_parent_id = self
-            .get_parent(x_id)
-            .map(|upstream_parent| upstream_parent.id());
+        let y = match direction {
+            Direction::Left => z.as_mut().left.take(),
+            Direction::Right => z.as_mut().right.take(),
+        };
 
-        if let Some(upstream_parent_id) = optional_upstream_parent_id {
+        let optional_upstream_parent = x.parent;
+
+        if let Some(mut upstream_parent) = optional_upstream_parent {
             // Switch x with z on the upstream parent.
             // safe to unwrap
-            let upstream_direction = self.get_direction_of_node(x_id).unwrap();
-            let _ = self
-                .get_mut(upstream_parent_id)
-                .map(|node| match upstream_direction {
-                    Direction::Left => node.as_inner_mut().left = Some(z_id),
-                    Direction::Right => node.as_inner_mut().right = Some(z_id),
-                });
+            let upstream_direction = x.direction().unwrap();
+            match upstream_direction {
+                Direction::Left => upstream_parent.as_mut().left.replace(z),
+                Direction::Right => upstream_parent.as_mut().right.replace(z),
+            };
         } else {
-            self.root = Some(z_id);
+            self.root = Some(z);
         }
 
         // Set the parent of z to the upstream parent and make x a child of z.
-        let _ = self.get_mut(z_id).map(|z_node| {
-            let z_inner = z_node.as_inner_mut();
-            z_inner.parent = optional_upstream_parent_id;
-            match direction {
-                Direction::Left => z_inner.left.replace(x_id),
-                Direction::Right => z_inner.right.replace(x_id),
-            }
-        });
+        z.as_mut().parent = optional_upstream_parent;
+        match direction {
+            Direction::Left => z.as_mut().left.replace(x_node_ref),
+            Direction::Right => z.as_mut().right.replace(x_node_ref),
+        };
 
         // Set the parent of x to z and the inverse direction node of x to y if
         // it exists.
-        let _ = self.get_mut(x_id).map(|x_node| {
-            let x_inner = x_node.as_inner_mut();
-            x_inner.parent = Some(z_id);
-            match direction {
-                Direction::Left => x_inner.right = y_id,
-                Direction::Right => x_inner.left = y_id,
-            }
-        });
+        x.parent = Some(z);
+        match direction {
+            Direction::Left => x.right = y,
+            Direction::Right => x.left = y,
+        };
 
         // if y exists, set its parent to x.
-        y_id.and_then(|id| self.get_mut(id))
-            .map(|y_node| y_node.as_inner_mut().parent.replace(x_id));
+        if let Some(mut y_node) = y {
+            y_node.as_mut().parent = Some(x_node_ref);
+        }
 
-        Some(z_id)
+        Some(z)
     }
 
     #[allow(clippy::redundant_closure)]
-    fn recolor_mut(&mut self, base_id: NodeId, action: Operation) -> Option<Rebalance> {
+    unsafe fn recolor_mut(
+        &mut self,
+        base_node: NodeRef<V>,
+        action: Operation,
+    ) -> Option<Rebalance<V>> {
         match action {
-            Operation::Insert => self.recolor_on_insertion_mut(base_id),
+            Operation::Insert => self.recolor_on_insertion_mut(base_node),
+            Operation::Delete => todo!(),
         }
     }
 
     #[allow(clippy::redundant_closure)]
-    fn recolor_on_insertion_mut(&mut self, base_id: NodeId) -> Option<Rebalance> {
+    unsafe fn recolor_on_insertion_mut(&mut self, base_node: NodeRef<V>) -> Option<Rebalance<V>> {
+        let base = base_node.as_ref();
+
         // set parent to black and return the id
-        let parent_id = self.get_parent_mut(base_id).map(|parent_node| {
-            parent_node.set_color_mut(Color::Black);
-            parent_node.id()
-        })?;
+        let parent = base.parent?.as_mut();
+        parent.color = Color::Black;
 
         // set uncle to black and return its id.
-        let uncle_id = self.get_uncle(base_id).map(|uncle_node| uncle_node.id())?;
-        self.get_mut(uncle_id).map(|uncle_node| {
-            uncle_node.set_color_mut(Color::Black);
-            uncle_node.id()
-        })?;
+        let uncle = base.uncle()?.as_mut();
+        uncle.color = Color::Black;
 
         // if grandparent is black, flip to red and recurse up.
-        self.get_parent_mut(parent_id)
-            .and_then(|grandparent_node| match grandparent_node.color() {
-                Color::Red => None,
-                Color::Black => {
-                    grandparent_node.set_color_mut(Color::Red);
-                    Some(grandparent_node.id())
-                }
-            })
-            .map(|grandparent_id| Rebalance::Recolor(grandparent_id))
+        let grandparent = base.grandparent()?.as_mut();
+        match grandparent.color {
+            Color::Red => None,
+            Color::Black => {
+                grandparent.color = Color::Red;
+                Some(base.grandparent()?)
+            }
+        }
+        .map(Rebalance::Recolor)
     }
 
-    fn handle_ll_mut(&mut self, node_id: NodeId) {
-        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
-        let grandparent_id = self
-            .get_grandparent(node_id)
-            .map(|grandfather| grandfather.id())
-            .unwrap();
+    unsafe fn handle_ll_mut(&mut self, node: NodeRef<V>) {
+        let mut parent = node.as_ref().parent.unwrap();
+        let mut grandparent = node.as_ref().grandparent().unwrap();
 
         // rotate grandfather right
-        self.rotate_right_mut(grandparent_id);
+        self.rotate_right_mut(grandparent);
 
         // flip the colors of the original grandparent and parent
-        self.get_mut(grandparent_id)
-            .map(|grandfather| grandfather.flip_color_mut())
-            .unwrap();
-        self.get_mut(parent_id)
-            .map(|grandfather| grandfather.flip_color_mut())
-            .unwrap();
+        let grandparent_color = grandparent.as_ref().color;
+        grandparent.as_mut().color = grandparent_color.flip();
+        let parent_color = parent.as_ref().color;
+        parent.as_mut().color = parent_color.flip();
     }
 
-    fn handle_lr_mut(&mut self, node_id: NodeId) {
-        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
+    unsafe fn handle_lr_mut(&mut self, node: NodeRef<V>) {
+        let parent = node.as_ref().parent.unwrap();
 
         // rotate parent left
-        self.rotate_left_mut(parent_id);
+        self.rotate_left_mut(parent);
+
         // rotated down.
-        let new_base_id = parent_id;
+        let new_child_node = parent;
 
         // then apply an LL case
-        self.handle_ll_mut(new_base_id)
+        self.handle_ll_mut(new_child_node)
     }
 
-    fn handle_rr_mut(&mut self, node_id: NodeId) {
-        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
-        let grandparent_id = self
-            .get_grandparent(node_id)
-            .map(|grandfather| grandfather.id())
-            .unwrap();
+    unsafe fn handle_rr_mut(&mut self, node: NodeRef<V>) {
+        let mut parent = node.as_ref().parent.unwrap();
+        let mut grandparent = node.as_ref().grandparent().unwrap();
 
         // rotate grandfather left
-        self.rotate_left_mut(grandparent_id);
+        self.rotate_left_mut(grandparent);
 
         // flip the colors of the original grandparent and parent
-        self.get_mut(grandparent_id)
-            .map(|grandfather| grandfather.flip_color_mut())
-            .unwrap();
-        self.get_mut(parent_id)
-            .map(|grandfather| grandfather.flip_color_mut())
-            .unwrap();
+        let grandparent_color = grandparent.as_ref().color;
+        grandparent.as_mut().color = grandparent_color.flip();
+        let parent_color = parent.as_ref().color;
+        parent.as_mut().color = parent_color.flip();
     }
 
-    fn handle_rl_mut(&mut self, node_id: NodeId) {
-        let parent_id = self.get_parent(node_id).map(|parent| parent.id()).unwrap();
-
+    unsafe fn handle_rl_mut(&mut self, node: NodeRef<V>) {
+        let parent = node.as_ref().parent.unwrap();
         // rotate parent right
-        self.rotate_right_mut(parent_id);
+        self.rotate_right_mut(parent);
 
         // rotated down.
-        let new_base_id = parent_id;
+        let new_child_node = parent;
 
         // then apply an RR case
-        self.handle_rr_mut(new_base_id)
-    }
-
-    /// Retrieves a the parent of a Node, Optionally returning a reference to
-    /// the parent Node if it exists.
-    fn get_parent(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.get(id)
-            .and_then(|node| node.as_inner().parent)
-            .and_then(|parent_id| self.get(parent_id))
-    }
-
-    /// Retrieves a the parent of a Node, Optionally returning a mutable
-    /// reference to the parent Node if it exists.
-    fn get_parent_mut(&mut self, id: NodeId) -> Option<&mut ColorNode<V>> {
-        match self.get_parent(id).map(|parent_node| parent_node.id()) {
-            Some(parent_id) => self.get_mut(parent_id),
-            None => None,
-        }
-    }
-
-    /// Retrieves the parent of a Node's parent, Optionally returning a
-    /// reference to the grandparent Node if it exists.
-    fn get_grandparent(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.get_parent(id)
-            .and_then(|node| node.as_inner().parent)
-            .and_then(|parent_id| self.get(parent_id))
-    }
-
-    /// Retrieves the uncle of a Node, Optionally returning a reference to the
-    /// uncle Node if it exists.
-    fn get_uncle(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.get_parent(id)
-            .and_then(|node| self.get_sibling(node.as_inner().id))
-    }
-
-    /// Retrieves the sibling of a Node, Optionally returning a reference to the
-    /// sibling Node if it exists.
-    fn get_sibling(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        self.get_parent(id)
-            .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
-                // return any leaf that doesn't match the original id or none.
-                (Some(leaf_id), _) if leaf_id != id => Some(leaf_id),
-                (_, Some(leaf_id)) if leaf_id != id => Some(leaf_id),
-                _ => None,
-            })
-            .and_then(|id| self.get(id))
-    }
-
-    /// Retrieves the close nephew of a Node, Optionally returning a reference
-    /// to the close nephew Node if it exists.
-    #[allow(dead_code)]
-    fn get_close_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        let direction = self.get_direction_of_node(id)?;
-
-        self.get_sibling(id)
-            .and_then(|node| match direction {
-                Direction::Left => node.as_inner().left,
-                Direction::Right => node.as_inner().right,
-            })
-            // Attempt to lookup the node after unpacking it from the sibling.
-            .and_then(|nephew_id| self.get(nephew_id))
-    }
-
-    /// Retrieves the distant nephew of a Node, Optionally returning a reference
-    /// to the distant nephew Node if it exists.
-    #[allow(dead_code)]
-    fn get_distant_nephew(&self, id: NodeId) -> Option<&ColorNode<V>> {
-        let direction = self.get_direction_of_node(id)?;
-
-        self.get_sibling(id)
-            .and_then(|node| match direction {
-                Direction::Left => node.as_inner().right,
-                Direction::Right => node.as_inner().left,
-            })
-            // Attempt to lookup the node after unpacking it from the sibling.
-            .and_then(|nephew_id| self.get(nephew_id))
-    }
-
-    /// Retrieves the direction of a node from it's parent.
-    fn get_direction_of_node(&self, id: NodeId) -> Option<Direction> {
-        self.get_parent(id)
-            .and_then(|node| match (node.as_inner().left, node.as_inner().right) {
-                (Some(leaf_id), _) if leaf_id == id => Some(Direction::Left),
-                (_, Some(leaf_id)) if leaf_id == id => Some(Direction::Right),
-                _ => None,
-            })
+        self.handle_rr_mut(new_child_node)
     }
 
     /// Returns the node with the left-most value (smallest) or `None` if the
     /// tree is empty.
-    pub fn min(&self) -> Option<NodeId> {
+    pub unsafe fn min(&self) -> Option<NodeRef<V>> {
         self.root
-            .and_then(|base_node_id| self.find_min_from(base_node_id))
+            .and_then(|base_node| self.find_min_from(base_node))
     }
 
     /// Returns the node with the left-most value (smallest) or `None`, if
     /// empty, starting from a given base node.
-    fn find_min_from(&self, base_node_id: NodeId) -> Option<NodeId> {
-        let mut current = Some(base_node_id);
+    unsafe fn find_min_from(&self, base: NodeRef<V>) -> Option<NodeRef<V>> {
+        let mut current = Some(base);
         let mut left_most_node = current;
         while let Some(id) = current {
             left_most_node = current;
-            current = self
-                .get(id)
-                .and_then(|color_node| color_node.as_inner().left);
+            current = id.as_ref().left;
         }
         left_most_node
     }
 
     /// Returns the node with the right-most value (largest) or `None` if the
     /// tree is empty.
-    pub fn max(&self) -> Option<NodeId> {
+    pub unsafe fn max(&self) -> Option<NodeRef<V>> {
         self.root
-            .and_then(|base_node_id| self.max_from_base_node(base_node_id))
+            .and_then(|base_node| self.max_from_base_node(base_node))
     }
 
     /// Returns the node with the right-most value (largest) or `None`, if
     /// empty, starting from a given base node.
-    fn max_from_base_node(&self, base_node_id: NodeId) -> Option<NodeId> {
+    unsafe fn max_from_base_node(&self, base_node_id: NodeRef<V>) -> Option<NodeRef<V>> {
         let mut current = Some(base_node_id);
         let mut right_most_node = current;
         while let Some(id) = current {
             right_most_node = current;
-            current = self
-                .get(id)
-                .and_then(|color_node| color_node.as_inner().right);
+            current = id.as_ref().right;
         }
         right_most_node
     }
@@ -823,19 +535,57 @@ where
     }
 }
 
-pub struct IterInOrder<'a, V: 'a> {
-    inner: &'a RedBlackTree<V>,
-    left_most_node: Option<NodeId>,
-    stack: Vec<NodeId>,
+impl<V> Drop for RedBlackTree<V>
+where
+    V: PartialOrd,
+{
+    fn drop(&mut self) {
+        unsafe {
+            while let Some(node) = self.min() {
+                let direction = node.as_ref().direction();
+                if let Some(mut parent) = node.as_ref().parent {
+                    match direction {
+                        Some(Direction::Left) => parent.as_mut().left = None,
+                        Some(Direction::Right) => parent.as_mut().right = None,
+                        None => self.root = None,
+                    }
+                } else {
+                    // if current node is the root, make sure to clear the root field.
+                    self.root = None
+                }
+
+                let node_ptr = node.as_ptr();
+                Box::from_raw(node_ptr);
+            }
+        }
+    }
+}
+
+impl<V> Default for RedBlackTree<V>
+where
+    V: PartialEq + PartialOrd,
+{
+    fn default() -> Self {
+        Self { root: None }
+    }
+}
+
+pub struct IterInOrder<'a, V>
+where
+    V: PartialEq + PartialOrd + 'a,
+{
+    inner: std::marker::PhantomData<&'a RedBlackTree<V>>,
+    left_most_node: Option<NodeRef<V>>,
+    stack: Vec<NodeRef<V>>,
 }
 
 impl<'a, V: 'a> IterInOrder<'a, V>
 where
-    V: PartialEq + PartialOrd + Default + 'a,
+    V: PartialEq + PartialOrd + 'a,
 {
     pub fn new(inner: &'a RedBlackTree<V>) -> Self {
         Self {
-            inner,
+            inner: std::marker::PhantomData,
             left_most_node: inner.root,
             stack: Vec::new(),
         }
@@ -852,20 +602,11 @@ where
         while let Some(id) = self.left_most_node {
             self.stack.push(id);
 
-            self.left_most_node = self
-                .inner
-                .get(id)
-                .and_then(|color_node| color_node.as_inner().left);
+            self.left_most_node = unsafe { id.as_ref().left };
         }
         if let Some(up_from_current) = self.stack.pop() {
-            self.left_most_node = self
-                .inner
-                .get(up_from_current)
-                .and_then(|color_node| color_node.as_inner().right);
-
-            self.inner
-                .get(up_from_current)
-                .map(|color_node| &color_node.as_inner().inner)
+            self.left_most_node = unsafe { up_from_current.as_ref().right };
+            Some(unsafe { &up_from_current.as_ref().inner })
         } else {
             None
         }
@@ -878,31 +619,10 @@ mod tests {
 
     #[test]
     fn should_return_correct_empty_state_when_tree_has_values() {
-        let tree = RedBlackTree::default();
+        let tree = RedBlackTree::<usize>::default();
 
         assert!(tree.is_empty());
-        assert!(!tree.insert(10).is_empty());
-    }
-
-    #[test]
-    fn should_return_node_on_search_for_inserted_value() {
-        let tree = vec![10, 5]
-            .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
-
-        assert_eq!(
-            SearchResult::Hit(NodeId::from(1)),
-            tree.find_nearest_node(&5)
-        );
-    }
-
-    #[test]
-    fn should_correctly_balance_tree() {
-        let tree = vec![10, 15, 20, 25]
-            .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
-
-        println!("{:#?}", &tree)
+        assert!(!tree.insert(5).is_empty());
     }
 
     #[test]
@@ -914,20 +634,18 @@ mod tests {
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
-        let root = tree
-            .find_nearest_node(&root_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
-
-        let left = tree
-            .find_nearest_node(&left_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
-
-        let right = tree
-            .find_nearest_node(&right_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| color_node.color());
+        let root = unsafe {
+            tree.find_nearest_node(&root_val)
+                .hit_then(|node| node.as_ref().color)
+        };
+        let left = unsafe {
+            tree.find_nearest_node(&left_val)
+                .hit_then(|node| node.as_ref().color)
+        };
+        let right = unsafe {
+            tree.find_nearest_node(&right_val)
+                .hit_then(|node| node.as_ref().color)
+        };
 
         assert_eq!(Some(Color::Black), root);
         assert_eq!(Some(Color::Red), left);
@@ -943,25 +661,25 @@ mod tests {
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
-        let child = tree
-            .find_nearest_node(&child_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
+        let child = unsafe {
+            tree.find_nearest_node(&child_val)
+                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+        };
 
-        let parent = tree
-            .find_nearest_node(&parent_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
+        let parent = unsafe {
+            tree.find_nearest_node(&parent_val)
+                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+        };
 
-        let uncle = tree
-            .find_nearest_node(&uncle_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
+        let uncle = unsafe {
+            tree.find_nearest_node(&uncle_val)
+                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+        };
 
-        let grandparent = tree
-            .find_nearest_node(&grandparent_val)
-            .hit_then(|matching_node: NodeId| tree.get(matching_node).unwrap())
-            .map(|color_node| (color_node.color(), color_node.as_inner().inner));
+        let grandparent = unsafe {
+            tree.find_nearest_node(&grandparent_val)
+                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+        };
 
         assert_eq!(Some((Color::Black, child_val)), child);
         assert_eq!(Some((Color::Red, parent_val)), parent);
@@ -976,23 +694,23 @@ mod tests {
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         // rotate the root of the tree left
-        tree.rotate_left_mut(tree.root.unwrap());
+        unsafe { tree.rotate_left_mut(tree.root.unwrap()) };
 
-        let ten = tree.nodes[0].as_ref().unwrap().as_inner();
-        let five = tree.nodes[1].as_ref().unwrap().as_inner();
-        let fifteen = tree.nodes[2].as_ref().unwrap().as_inner();
+        let ten = unsafe { tree.find_nearest_node(&10).hit_then(|node| node) }.unwrap();
+        let five = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) }.unwrap();
+        let fifteen = unsafe { tree.find_nearest_node(&15).hit_then(|node| node) }.unwrap();
 
         // five's new parent should be the 10 node.
-        assert_eq!(Some(NodeId::from(0)), five.parent);
+        assert_eq!(Some(ten), unsafe { five.as_ref().parent });
 
         // ten's new parent should be the fifteen node and new child should be
         // 5.
-        assert_eq!(Some(NodeId::from(2)), ten.parent);
-        assert_eq!(Some(NodeId::from(1)), ten.left);
+        assert_eq!(Some(fifteen), unsafe { ten.as_ref().parent });
+        assert_eq!(Some(five), unsafe { ten.as_ref().left });
 
         // fifteen is root and is the parent of 10 node.
-        assert!(fifteen.is_root());
-        assert_eq!(Some(NodeId::from(0)), fifteen.left);
+        assert!(unsafe { fifteen.as_ref().is_root() });
+        assert_eq!(Some(ten), unsafe { fifteen.as_ref().left });
     }
 
     #[test]
@@ -1002,23 +720,23 @@ mod tests {
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
 
         // rotate the root of the tree right
-        tree.rotate_right_mut(tree.root.unwrap());
+        unsafe { tree.rotate_right_mut(tree.root.unwrap()) };
 
-        let ten = tree.nodes[0].as_ref().unwrap().as_inner();
-        let five = tree.nodes[1].as_ref().unwrap().as_inner();
-        let fifteen = tree.nodes[2].as_ref().unwrap().as_inner();
+        let ten = unsafe { tree.find_nearest_node(&10).hit_then(|node| node) }.unwrap();
+        let five = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) }.unwrap();
+        let fifteen = unsafe { tree.find_nearest_node(&15).hit_then(|node| node) }.unwrap();
 
         // five is root and is the parent of 10 node.
-        assert!(five.is_root());
-        assert_eq!(Some(NodeId::from(0)), five.right);
+        assert!(unsafe { five.as_ref().is_root() });
+        assert_eq!(Some(ten), unsafe { five.as_ref().right });
 
         // 10's new parent should be the 5 node and new child should be
         // 15.
-        assert_eq!(Some(NodeId::from(1)), ten.parent);
-        assert_eq!(Some(NodeId::from(2)), ten.right);
+        assert_eq!(Some(five), unsafe { ten.as_ref().parent });
+        assert_eq!(Some(fifteen), unsafe { ten.as_ref().right });
 
         // fifteens's new parent should be the 10 node.
-        assert_eq!(Some(NodeId::from(0)), fifteen.parent);
+        assert_eq!(Some(ten), unsafe { fifteen.as_ref().parent });
     }
 
     #[test]
@@ -1026,16 +744,16 @@ mod tests {
         let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
-        let max_node_id = NodeId::from(3);
-        let min_node_id = NodeId::from(1);
+        let max_val = unsafe { tree.max().map(|node| node.as_ref().inner) };
+        let min_val = unsafe { tree.min().map(|node| node.as_ref().inner) };
 
-        assert_eq!(Some(max_node_id), tree.max());
-        assert_eq!(Some(min_node_id), tree.min());
+        assert_eq!(Some(25), max_val);
+        assert_eq!(Some(5), min_val);
 
         let empty_tree = RedBlackTree::<usize>::default();
 
-        assert_eq!(None, empty_tree.max());
-        assert_eq!(None, empty_tree.min());
+        assert_eq!(None, unsafe { empty_tree.max() });
+        assert_eq!(None, unsafe { empty_tree.min() });
     }
 
     #[test]
