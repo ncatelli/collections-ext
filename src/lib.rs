@@ -493,9 +493,12 @@ where
 
     /// Returns the node with the left-most value (smallest) or `None` if the
     /// tree is empty.
-    pub unsafe fn min(&self) -> Option<NodeRef<V>> {
-        self.root
-            .and_then(|base_node| self.find_min_from(base_node))
+    pub fn min(&self) -> Option<&V> {
+        unsafe {
+            self.root
+                .and_then(|base_node| self.find_min_from(base_node))
+                .map(|node| &node.as_ref().inner)
+        }
     }
 
     /// Returns the node with the left-most value (smallest) or `None`, if
@@ -512,14 +515,17 @@ where
 
     /// Returns the node with the right-most value (largest) or `None` if the
     /// tree is empty.
-    pub unsafe fn max(&self) -> Option<NodeRef<V>> {
-        self.root
-            .and_then(|base_node| self.max_from_base_node(base_node))
+    pub fn max(&self) -> Option<&V> {
+        unsafe {
+            self.root
+                .and_then(|base_node| self.find_max_from(base_node))
+                .map(|node| &node.as_ref().inner)
+        }
     }
 
     /// Returns the node with the right-most value (largest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn max_from_base_node(&self, base_node_id: NodeRef<V>) -> Option<NodeRef<V>> {
+    unsafe fn find_max_from(&self, base_node_id: NodeRef<V>) -> Option<NodeRef<V>> {
         let mut current = Some(base_node_id);
         let mut right_most_node = current;
         while let Some(id) = current {
@@ -541,7 +547,9 @@ where
 {
     fn drop(&mut self) {
         unsafe {
-            while let Some(node) = self.min() {
+            while let Some(value) = self.min() {
+                // if min returns a value, this is safe to unwrap
+                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
                 let direction = node.as_ref().direction();
                 if let Some(mut parent) = node.as_ref().parent {
                     match direction {
@@ -744,16 +752,14 @@ mod tests {
         let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
             .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
-        let max_val = unsafe { tree.max().map(|node| node.as_ref().inner) };
-        let min_val = unsafe { tree.min().map(|node| node.as_ref().inner) };
 
-        assert_eq!(Some(25), max_val);
-        assert_eq!(Some(5), min_val);
+        assert_eq!(Some(&25), tree.max());
+        assert_eq!(Some(&5), tree.min());
 
         let empty_tree = RedBlackTree::<usize>::default();
 
-        assert_eq!(None, unsafe { empty_tree.max() });
-        assert_eq!(None, unsafe { empty_tree.min() });
+        assert_eq!(None, empty_tree.max());
+        assert_eq!(None, empty_tree.min());
     }
 
     #[test]
