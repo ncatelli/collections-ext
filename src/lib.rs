@@ -98,18 +98,6 @@ where
         }
     }
 
-    /// Returns a boolean signifying if this node is the root (has no parents)
-    /// node.
-    fn is_root(&self) -> bool {
-        self.parent.is_none()
-    }
-
-    /// Returns a boolean signifying if the node is a leaf node (has no
-    /// children)
-    fn is_leaf(&self) -> bool {
-        self.left.is_none() && self.right.is_none()
-    }
-
     /// Returns the inner value of the Node.
     pub fn unwrap(self) -> V {
         self.inner
@@ -214,20 +202,14 @@ where
                 } else if value <= &next_step.as_ref().inner {
                     // if left leaf exists follow that direction.
                     match &next_step.as_ref().left {
-                        Some(left) => {
-                            let left = left.clone();
-                            next_step = left
-                        }
+                        Some(left) => next_step = *left,
                         // return the parent
                         None => return SearchResult::Miss(next_step),
                     }
                 } else {
                     // if right leaf exists follow that direction.
                     match &next_step.as_ref().right {
-                        Some(right) => {
-                            let right = right.clone();
-                            next_step = right
-                        }
+                        Some(right) => next_step = *right,
                         // return the parent
                         None => return SearchResult::Miss(next_step),
                     }
@@ -717,7 +699,7 @@ mod tests {
         assert_eq!(Some(five), unsafe { ten.as_ref().left });
 
         // fifteen is root and is the parent of 10 node.
-        assert!(unsafe { fifteen.as_ref().is_root() });
+        assert!(unsafe { fifteen.as_ref().parent == None });
         assert_eq!(Some(ten), unsafe { fifteen.as_ref().left });
     }
 
@@ -735,7 +717,7 @@ mod tests {
         let fifteen = unsafe { tree.find_nearest_node(&15).hit_then(|node| node) }.unwrap();
 
         // five is root and is the parent of 10 node.
-        assert!(unsafe { five.as_ref().is_root() });
+        assert!(unsafe { five.as_ref().parent == None });
         assert_eq!(Some(ten), unsafe { five.as_ref().right });
 
         // 10's new parent should be the 5 node and new child should be
