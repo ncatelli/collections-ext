@@ -164,13 +164,16 @@ impl<V> SearchResult<V> {
 
 /// An implementation of a Red-Black Tree
 #[derive(Debug, Clone)]
-pub struct RedBlackTree<V> {
+pub struct RedBlackTree<V>
+where
+    V: PartialEq + PartialOrd,
+{
     root: Option<NodeRef<V>>,
 }
 
 impl<V> RedBlackTree<V>
 where
-    V: PartialEq,
+    V: PartialEq + PartialOrd,
 {
     pub fn new(root: V) -> Self {
         let boxed_node = Box::new(Node::new(Color::Black, root, None, None, None));
@@ -520,14 +523,46 @@ where
     }
 }
 
-impl<V> Default for RedBlackTree<V> {
+impl<V> Drop for RedBlackTree<V>
+where
+    V: PartialOrd,
+{
+    fn drop(&mut self) {
+        unsafe {
+            while let Some(node) = self.min() {
+                let direction = node.as_ref().direction();
+                if let Some(mut parent) = node.as_ref().parent {
+                    match direction {
+                        Some(Direction::Left) => parent.as_mut().left = None,
+                        Some(Direction::Right) => parent.as_mut().right = None,
+                        None => self.root = None,
+                    }
+                } else {
+                    // if current node is the root, make sure to clear the root field.
+                    self.root = None
+                }
+
+                let node_ptr = node.as_ptr();
+                Box::from_raw(node_ptr);
+            }
+        }
+    }
+}
+
+impl<V> Default for RedBlackTree<V>
+where
+    V: PartialEq + PartialOrd,
+{
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-pub struct IterInOrder<'a, V: 'a> {
-    inner: &'a RedBlackTree<V>,
+pub struct IterInOrder<'a, V>
+where
+    V: PartialEq + PartialOrd + 'a,
+{
+    inner: std::marker::PhantomData<&'a RedBlackTree<V>>,
     left_most_node: Option<NodeRef<V>>,
     stack: Vec<NodeRef<V>>,
 }
@@ -538,7 +573,7 @@ where
 {
     pub fn new(inner: &'a RedBlackTree<V>) -> Self {
         Self {
-            inner,
+            inner: std::marker::PhantomData,
             left_most_node: inner.root,
             stack: Vec::new(),
         }
@@ -576,6 +611,33 @@ mod tests {
 
         assert!(tree.is_empty());
         assert!(!tree.insert(5).is_empty());
+    }
+
+    #[test]
+    fn should_paint_newly_inserted_nodes_red() {
+        let node_values = [10, 5, 15];
+        let [root_val, left_val, right_val] = node_values;
+        let tree = node_values
+            .to_vec()
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        let root = unsafe {
+            tree.find_nearest_node(&root_val)
+                .hit_then(|node| node.as_ref().color)
+        };
+        let left = unsafe {
+            tree.find_nearest_node(&left_val)
+                .hit_then(|node| node.as_ref().color)
+        };
+        let right = unsafe {
+            tree.find_nearest_node(&right_val)
+                .hit_then(|node| node.as_ref().color)
+        };
+
+        assert_eq!(Some(Color::Black), root);
+        assert_eq!(Some(Color::Red), left);
+        assert_eq!(Some(Color::Red), right);
     }
 
     #[test]
