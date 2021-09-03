@@ -258,11 +258,119 @@ where
     }
 
     unsafe fn remove_mut_unchecked(&mut self, value: &V) -> Option<V> {
-        if let SearchResult::Hit(_node) = self.find_nearest_node(value) {
-            todo!()
-        } else {
-            None
+        let node_to_be_deleted = self.find_nearest_node(value).hit_then(|node| node)?;
+        let optional_node_direction = node_to_be_deleted.as_ref().direction();
+        let original_color = node_to_be_deleted.as_ref().color;
+        let optional_parent = node_to_be_deleted.as_ref().parent;
+        let optional_left_child = node_to_be_deleted.as_ref().left;
+        let optional_right_child = node_to_be_deleted.as_ref().right;
+
+        let delete_successor = match (optional_left_child, optional_right_child) {
+            (None, None) => DeleteSuccessor::None,
+            (Some(successor), None) | (None, Some(successor)) => DeleteSuccessor::Single(successor),
+            (Some(_), Some(_)) => {
+                DeleteSuccessor::Double(self.find_in_order_successor(node_to_be_deleted))
+            }
+        };
+
+        match delete_successor {
+            DeleteSuccessor::Single(mut x) => {
+                // convert to a box so it is dropped
+                let boxed_node_to_be_deleted = Box::from_raw(node_to_be_deleted.as_ptr());
+
+                // transplant color for successor
+                x.as_mut().color = original_color;
+
+                if let Some(direction) = optional_node_direction {
+                    // if it has a direction it's safe to unwrap.
+                    let mut parent = optional_parent.expect("unable to unwrap parent");
+                    match direction {
+                        Direction::Left => parent.as_mut().left = Some(x),
+                        Direction::Right => parent.as_mut().right = Some(x),
+                    };
+                } else {
+                    self.root = Some(x);
+                }
+
+                x.as_mut().parent = boxed_node_to_be_deleted.parent;
+
+                // Take ownership of the inner value
+                let inner = boxed_node_to_be_deleted.inner;
+                Some(inner)
+            }
+            // can be directly deleted
+            DeleteSuccessor::None => {
+                // convert to a box so it is dropped
+                let boxed_node_to_be_deleted = Box::from_raw(node_to_be_deleted.as_ptr());
+                if let Some(direction) = optional_node_direction {
+                    // if it has a direction it's safe to unwrap.
+                    let mut parent = optional_parent.expect("unable to unwrap parent");
+                    match direction {
+                        Direction::Left => parent.as_mut().left = None,
+                        Direction::Right => parent.as_mut().right = None,
+                    };
+                }
+
+                // Take ownership of the inner value
+                let inner = boxed_node_to_be_deleted.inner;
+                Some(inner)
+            }
+            DeleteSuccessor::Double(in_order_successor) => {
+                /*
+                    Assign the minimum of right subtree of noteToBeDeleted into y.
+                    Save the color of y in originalColor.
+                    Assign the rightChild of y into x.
+                    If y is a child of nodeToBeDeleted, then set the parent of x as y.
+                    Else, transplant y with rightChild of y.
+                    Transplant nodeToBeDeleted with y.
+                    Set the color of y with originalColor.
+
+                If the originalColor is BLACK, call DeleteFix(x).
+                 */
+                // convert to a box so it is dropped
+                let boxed_node_to_be_deleted = Box::from_raw(node_to_be_deleted.as_ptr());
+                let mut y =
+                    in_order_successor.expect("in order successor is null on a two child delete");
+                let x = y.as_ref().right;
+
+                // If y is not a child of nodeToBeDeletedtransplant y with rightChild of y
+                if y.as_ref().parent != Some(node_to_be_deleted) {
+                    // safe to unwrap, y is guaranteed a parent by the sucessor check.
+                    let y_direction = y.as_ref().direction().expect("y has no parent");
+                    let mut y_parent = y.as_ref().parent.expect("y has no parent");
+
+                    match y_direction {
+                        Direction::Left => y_parent.as_mut().left = x,
+                        Direction::Right => y_parent.as_mut().right = x,
+                    }
+                }
+
+                // Transplant nodeToBeDeleted with y.
+                // Set the color of y with originalColor.
+                y.as_mut().parent = boxed_node_to_be_deleted.parent;
+                match boxed_node_to_be_deleted.direction() {
+                    // safe to unwrap parents because of direction check
+                    Some(Direction::Left) => {
+                        boxed_node_to_be_deleted.parent.unwrap().as_mut().left = Some(y)
+                    }
+                    Some(Direction::Right) => {
+                        boxed_node_to_be_deleted.parent.unwrap().as_mut().right = Some(y)
+                    }
+                    None => (),
+                };
+
+                y.as_mut().left = boxed_node_to_be_deleted.left;
+                y.as_mut().color = boxed_node_to_be_deleted.color;
+
+                Some(boxed_node_to_be_deleted.inner)
+            }
         }
+    }
+
+    unsafe fn find_in_order_successor(&self, node: NodeRef<V>) -> Option<NodeRef<V>> {
+        let optional_right_child = node.as_ref().right;
+
+        optional_right_child.and_then(|child| self.find_min_from(child))
     }
 
     unsafe fn rebalance_mut(&mut self, node: NodeRef<V>, action: Operation) {
@@ -778,5 +886,46 @@ mod tests {
         let received: Vec<u16> = tree.traverse_in_order().copied().collect();
         let expected: Vec<u16> = (0..1024).collect();
         assert_eq!(expected, received);
+    }
+
+    #[test]
+    fn should_remove_node_with_no_children() {
+        let node_values = [10, 5, 1, 15];
+        let tree = node_values
+            .to_vec()
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .remove(&1);
+
+        let left_child_of_root = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) };
+
+        assert_eq!(
+            None,
+            left_child_of_root.and_then(|c| unsafe { c.as_ref().left })
+        );
+    }
+
+    #[test]
+    fn should_remove_node_with_one_child_while_retaining_relationships() {
+        let node_values = [10, 5, 1, 15];
+        let tree = node_values
+            .to_vec()
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .remove(&10);
+
+        let root = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) };
+        let child_of_node_to_be_deleted =
+            unsafe { tree.find_nearest_node(&15).hit_then(|node| node) };
+
+        assert_eq!(
+            root,
+            child_of_node_to_be_deleted.and_then(|c| unsafe { c.as_ref().parent })
+        );
+
+        assert_eq!(
+            child_of_node_to_be_deleted,
+            root.and_then(|c| unsafe { c.as_ref().right })
+        );
     }
 }
