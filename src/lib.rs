@@ -10,15 +10,6 @@ enum Direction {
     Right,
 }
 
-/// Represents one of two actions that can trigger a rebalance/modification.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Operation {
-    /// A new node has been inserted into the tree.
-    Insert,
-    /// A node has been removed from the tree.
-    Delete,
-}
-
 /// Represents the three possible situations that a node can encounter on a delete,
 #[derive(Clone, Copy, PartialEq)]
 enum DeleteSuccessor<V> {
@@ -43,11 +34,6 @@ enum InsertRebalance<V> {
     RightLeft(NodeRef<V>),
     /// Contains the next base node for recoloring.
     Recolor(NodeRef<V>),
-}
-
-/// DeletionRebalance captures the states of an insertion rebalance operation.
-enum DeletionRebalance<V> {
-    Case1(NodeRef<V>),
 }
 
 /// An enumerable value representing the available colors of a node.
@@ -456,6 +442,7 @@ where
         }
     }
 
+    #[allow(unused_assignments)]
     unsafe fn rebalance_on_deletion_mut(
         &mut self,
         mut x: Option<NodeRef<V>>,
