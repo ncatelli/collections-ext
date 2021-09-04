@@ -10,15 +10,6 @@ enum Direction {
     Right,
 }
 
-/// Represents one of two actions that can trigger a rebalance/modification.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Operation {
-    /// A new node has been inserted into the tree.
-    Insert,
-    /// A node has been removed from the tree.
-    Delete,
-}
-
 /// Represents the three possible situations that a node can encounter on a delete,
 #[derive(Clone, Copy, PartialEq)]
 enum DeleteSuccessor<V> {
@@ -31,16 +22,16 @@ enum DeleteSuccessor<V> {
     None,
 }
 
-/// Rebalance captures the states of rebalance operation.
-enum Rebalance<V> {
+/// InsertRebalance captures the states of an insertion rebalance operation.
+enum InsertRebalance<V> {
     /// Represents a LeftLeft case of inbalance.
-    LeftLeft,
+    LeftLeft(NodeRef<V>),
     /// Represents a LeftRight case of inbalance.
-    LeftRight,
+    LeftRight(NodeRef<V>),
     /// Represents a RightRight case of inbalance.
-    RightRight,
+    RightRight(NodeRef<V>),
     /// Represents a RightLeft case of inbalance.
-    RightLeft,
+    RightLeft(NodeRef<V>),
     /// Contains the next base node for recoloring.
     Recolor(NodeRef<V>),
 }
@@ -243,7 +234,11 @@ where
                     parent_node.as_mut().right = child_ptr;
                 }
 
-                self.rebalance_mut(child_ptr.unwrap(), Operation::Insert)
+                if let Some(rebalance_operation) =
+                    self.needs_rebalance_after_insertion(child_ptr.unwrap())
+                {
+                    self.rebalance_on_insertion_mut(rebalance_operation)
+                }
             }
         };
     }
@@ -331,13 +326,18 @@ where
                 let boxed_node_to_be_deleted = Box::from_raw(node_to_be_deleted.as_ptr());
                 let mut y =
                     in_order_successor.expect("in order successor is null on a two child delete");
+                let y_direction = y.as_ref().direction().expect("y has no parent");
+
                 let x = y.as_ref().right;
+                let mut x_parent = y;
+                let mut x_direction = Direction::Right;
 
                 // If y is not a child of nodeToBeDeletedtransplant y with rightChild of y
                 if y.as_ref().parent != Some(node_to_be_deleted) {
                     // safe to unwrap, y is guaranteed a parent by the sucessor check.
-                    let y_direction = y.as_ref().direction().expect("y has no parent");
                     let mut y_parent = y.as_ref().parent.expect("y has no parent");
+                    x_parent = y_parent;
+                    x_direction = y_direction;
 
                     match y_direction {
                         Direction::Left => y_parent.as_mut().left = x,
@@ -356,11 +356,20 @@ where
                     Some(Direction::Right) => {
                         boxed_node_to_be_deleted.parent.unwrap().as_mut().right = Some(y)
                     }
-                    None => (),
+                    None => self.root = Some(y),
                 };
 
                 y.as_mut().left = boxed_node_to_be_deleted.left;
+                if let Some(mut left) = boxed_node_to_be_deleted.left {
+                    left.as_mut().parent = Some(y);
+                }
+
                 y.as_mut().color = boxed_node_to_be_deleted.color;
+
+                if original_color == Color::Black {
+                    // safe to unwrap, cant reach unless x isn't root.
+                    self.rebalance_on_deletion_mut(x, x_direction, Some(x_parent));
+                }
 
                 Some(boxed_node_to_be_deleted.inner)
             }
@@ -373,28 +382,25 @@ where
         optional_right_child.and_then(|child| self.find_min_from(child))
     }
 
-    unsafe fn rebalance_mut(&mut self, node: NodeRef<V>, action: Operation) {
-        let mut next_step = match action {
-            Operation::Insert => self.needs_rebalance_after_insertion(node),
-            Operation::Delete => todo!(),
-        };
+    unsafe fn rebalance_on_insertion_mut(&mut self, rebalance_operation: InsertRebalance<V>) {
+        let mut next_step = Some(rebalance_operation);
 
         while let Some(step) = next_step {
             next_step = None;
             match step {
-                Rebalance::LeftLeft => {
+                InsertRebalance::LeftLeft(node) => {
                     self.handle_ll_mut(node);
                 }
-                Rebalance::LeftRight => {
+                InsertRebalance::LeftRight(node) => {
                     self.handle_lr_mut(node);
                 }
-                Rebalance::RightRight => {
+                InsertRebalance::RightRight(node) => {
                     self.handle_rr_mut(node);
                 }
-                Rebalance::RightLeft => {
+                InsertRebalance::RightLeft(node) => {
                     self.handle_rl_mut(node);
                 }
-                Rebalance::Recolor(base_id) => next_step = self.recolor_mut(base_id, action),
+                InsertRebalance::Recolor(node) => next_step = self.recolor_on_insertion_mut(node),
             }
         }
     }
@@ -402,7 +408,7 @@ where
     unsafe fn needs_rebalance_after_insertion(
         &self,
         base_node: NodeRef<V>,
-    ) -> Option<Rebalance<V>> {
+    ) -> Option<InsertRebalance<V>> {
         // short-circuit to none if the base is root.
         let base = base_node.as_ref();
         let base_node_direction = base.direction()?;
@@ -414,17 +420,125 @@ where
 
         if parent.color == Color::Red {
             if uncle_color == Color::Red {
-                Some(Rebalance::Recolor(base_node))
+                Some(InsertRebalance::Recolor(base_node))
             } else {
                 match (parent_direction, base_node_direction) {
-                    (Direction::Left, Direction::Left) => Some(Rebalance::LeftLeft),
-                    (Direction::Left, Direction::Right) => Some(Rebalance::LeftRight),
-                    (Direction::Right, Direction::Left) => Some(Rebalance::RightLeft),
-                    (Direction::Right, Direction::Right) => Some(Rebalance::RightRight),
+                    (Direction::Left, Direction::Left) => {
+                        Some(InsertRebalance::LeftLeft(base_node))
+                    }
+                    (Direction::Left, Direction::Right) => {
+                        Some(InsertRebalance::LeftRight(base_node))
+                    }
+                    (Direction::Right, Direction::Left) => {
+                        Some(InsertRebalance::RightLeft(base_node))
+                    }
+                    (Direction::Right, Direction::Right) => {
+                        Some(InsertRebalance::RightRight(base_node))
+                    }
                 }
             }
         } else {
             None
+        }
+    }
+
+    #[allow(unused_assignments)]
+    unsafe fn rebalance_on_deletion_mut(
+        &mut self,
+        mut x: Option<NodeRef<V>>,
+        x_direction: Direction,
+        mut optional_x_parent: Option<NodeRef<V>>,
+    ) {
+        while optional_x_parent.is_some()
+            && x.map_or(Color::Black, |node| node.as_ref().color) == Color::Black
+        {
+            let mut x_parent = optional_x_parent.unwrap();
+            match x_direction {
+                Direction::Left => {
+                    let mut optional_w = x_parent.as_ref().right;
+                    if let Some(mut w) = optional_w {
+                        if w.as_ref().color == Color::Red {
+                            w.as_mut().color = Color::Black;
+                            x_parent.as_mut().color = Color::Red;
+                            self.rotate_left_mut(x_parent);
+                            optional_w = x_parent.as_ref().right;
+                        }
+
+                        let w_left_child = w.as_ref().left;
+                        let w_left_child_color =
+                            w_left_child.map_or(Color::Black, |node| node.as_ref().color);
+                        let w_right_child = w.as_ref().right;
+                        let w_right_child_color =
+                            w_right_child.map_or(Color::Black, |node| node.as_ref().color);
+                        if w_left_child_color == Color::Black && w_right_child_color == Color::Black
+                        {
+                            w.as_mut().color = Color::Red;
+                            optional_x_parent = x_parent.as_ref().parent;
+                            x = Some(x_parent)
+                        } else {
+                            if w_right_child_color == Color::Black {
+                                if let Some(mut w_left_child) = w_left_child {
+                                    w_left_child.as_mut().color = Color::Black;
+                                }
+                                w.as_mut().color = Color::Red;
+                                self.rotate_right_mut(w);
+                                optional_w = x_parent.as_ref().right;
+                            }
+
+                            w.as_mut().color = x_parent.as_ref().color;
+                            x_parent.as_mut().color = Color::Black;
+                            if let Some(mut w_right_child) = w_right_child {
+                                w_right_child.as_mut().color = Color::Black;
+                            }
+                            self.rotate_left_mut(x_parent);
+                            x = self.root;
+                            break;
+                        }
+                    }
+                }
+                Direction::Right => {
+                    let mut optional_w = x_parent.as_ref().left;
+                    if let Some(mut w) = optional_w {
+                        if w.as_ref().color == Color::Red {
+                            w.as_mut().color = Color::Black;
+                            x_parent.as_mut().color = Color::Red;
+                            self.rotate_right_mut(x_parent);
+                            optional_w = x_parent.as_ref().left;
+                        }
+
+                        let w_left_child = w.as_ref().left;
+                        let w_left_child_color =
+                            w_left_child.map_or(Color::Black, |node| node.as_ref().color);
+                        let w_right_child = w.as_ref().right;
+                        let w_right_child_color =
+                            w_right_child.map_or(Color::Black, |node| node.as_ref().color);
+                        if w_left_child_color == Color::Black && w_right_child_color == Color::Black
+                        {
+                            w.as_mut().color = Color::Red;
+                            optional_x_parent = x_parent.as_ref().parent;
+                            x = Some(x_parent)
+                        } else {
+                            if w_right_child_color == Color::Black {
+                                if let Some(mut w_left_child) = w_left_child {
+                                    w_left_child.as_mut().color = Color::Black;
+                                }
+                                w.as_mut().color = Color::Red;
+                                self.rotate_left_mut(w);
+                                optional_w = x_parent.as_ref().left;
+                            }
+
+                            w.as_mut().color = x_parent.as_ref().color;
+                            x_parent.as_mut().color = Color::Black;
+                            if let Some(mut w_left_child) = w_left_child {
+                                w_left_child.as_mut().color = Color::Black;
+                            }
+                            self.rotate_right_mut(x_parent);
+                            x = self.root;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -505,19 +619,10 @@ where
     }
 
     #[allow(clippy::redundant_closure)]
-    unsafe fn recolor_mut(
+    unsafe fn recolor_on_insertion_mut(
         &mut self,
         base_node: NodeRef<V>,
-        action: Operation,
-    ) -> Option<Rebalance<V>> {
-        match action {
-            Operation::Insert => self.recolor_on_insertion_mut(base_node),
-            Operation::Delete => todo!(),
-        }
-    }
-
-    #[allow(clippy::redundant_closure)]
-    unsafe fn recolor_on_insertion_mut(&mut self, base_node: NodeRef<V>) -> Option<Rebalance<V>> {
+    ) -> Option<InsertRebalance<V>> {
         let base = base_node.as_ref();
 
         // set parent to black and return the id
@@ -537,7 +642,7 @@ where
                 Some(base.grandparent()?)
             }
         }
-        .map(Rebalance::Recolor)
+        .map(InsertRebalance::Recolor)
     }
 
     unsafe fn handle_ll_mut(&mut self, node: NodeRef<V>) {
@@ -926,6 +1031,42 @@ mod tests {
         assert_eq!(
             child_of_node_to_be_deleted,
             root.and_then(|c| unsafe { c.as_ref().right })
+        );
+    }
+
+    #[test]
+    fn should_remove_node_with_two_childen_while_retaining_relationships() {
+        let node_values = [10, 5, 1, 15];
+        let tree = node_values
+            .to_vec()
+            .into_iter()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .remove(&5);
+
+        // the new root to replace the deleted root
+        let new_root = unsafe { tree.find_nearest_node(&10).hit_then(|node| node) };
+
+        let new_root_right_child = unsafe { tree.find_nearest_node(&15).hit_then(|node| node) };
+        let new_root_left_child = unsafe { tree.find_nearest_node(&1).hit_then(|node| node) };
+
+        assert_eq!(
+            new_root,
+            new_root_left_child.and_then(|c| unsafe { c.as_ref().parent })
+        );
+
+        assert_eq!(
+            new_root_left_child,
+            new_root.and_then(|c| unsafe { c.as_ref().left })
+        );
+
+        assert_eq!(
+            new_root,
+            new_root_right_child.and_then(|c| unsafe { c.as_ref().parent })
+        );
+
+        assert_eq!(
+            new_root_right_child,
+            new_root.and_then(|c| unsafe { c.as_ref().right })
         );
     }
 }
