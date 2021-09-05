@@ -2,11 +2,14 @@ use std::ptr::NonNull;
 
 type NodeRef<V> = NonNull<Node<V>>;
 
-/// Represents a type that can be painted either Red or Black for tree
-/// balancing purposes.
+/// Represents a type that has a Color representation in the tree.
 trait Colored {
     /// Returns the color of a specific item.
     fn color(&self) -> Color;
+}
+
+/// A subtype of the `Colored` trait that allows for mutation of its color
+trait ColoredMut: Colored {
     /// Sets the color of an object to a passed color.
     fn set_color_mut(&mut self, color: Color);
     /// Inverts the color of a node.
@@ -19,7 +22,9 @@ impl<V> Colored for NodeRef<V> {
         let node = unsafe { self.as_ref() };
         node.color
     }
+}
 
+impl<V> ColoredMut for NodeRef<V> {
     fn set_color_mut(&mut self, color: Color) {
         let mut node = unsafe { self.as_mut() };
         node.color = color;
@@ -39,7 +44,9 @@ impl<V> Colored for Option<NodeRef<V>> {
             None => Color::Black,
         }
     }
+}
 
+impl<V> ColoredMut for Option<NodeRef<V>> {
     fn set_color_mut(&mut self, color: Color) {
         if let Some(mut noderef) = self {
             noderef.set_color_mut(color)
@@ -174,7 +181,9 @@ impl<V> Colored for Node<V> {
     fn color(&self) -> Color {
         self.color
     }
+}
 
+impl<V> ColoredMut for Node<V> {
     fn set_color_mut(&mut self, color: Color) {
         self.color = color;
     }
