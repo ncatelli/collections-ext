@@ -2,6 +2,57 @@ use std::ptr::NonNull;
 
 type NodeRef<V> = NonNull<Node<V>>;
 
+/// Represents a type that can be painted either Red or Black for tree
+/// balancing purposes.
+trait Colored {
+    /// Returns the color of a specific item.
+    fn color(&self) -> Color;
+    /// Sets the color of an object to a passed color.
+    fn set_color_mut(&mut self, color: Color);
+    /// Inverts the color of a node.
+    /// i.e. Red -> Black, or Black -> Red
+    fn set_flip_mut(&mut self);
+}
+
+impl<V> Colored for NodeRef<V> {
+    fn color(&self) -> Color {
+        let node = unsafe { self.as_ref() };
+        node.color
+    }
+
+    fn set_color_mut(&mut self, color: Color) {
+        let mut node = unsafe { self.as_mut() };
+        node.color = color;
+    }
+
+    fn set_flip_mut(&mut self) {
+        let node = unsafe { self.as_mut() };
+        let current_color = node.color;
+        node.set_color_mut(current_color.flip());
+    }
+}
+
+impl<V> Colored for Option<NodeRef<V>> {
+    fn color(&self) -> Color {
+        match self {
+            Some(noderef) => noderef.color(),
+            None => Color::Black,
+        }
+    }
+
+    fn set_color_mut(&mut self, color: Color) {
+        if let Some(mut noderef) = self {
+            noderef.set_color_mut(color)
+        }
+    }
+
+    fn set_flip_mut(&mut self) {
+        if let Some(mut noderef) = self {
+            noderef.set_flip_mut()
+        }
+    }
+}
+
 /// Direction represents the directional branch that a given child is on for
 /// a given node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +167,21 @@ where
     unsafe fn uncle(&self) -> Option<NodeRef<V>> {
         let parent = self.parent?.as_ref();
         parent.sibling()
+    }
+}
+
+impl<V> Colored for Node<V> {
+    fn color(&self) -> Color {
+        self.color
+    }
+
+    fn set_color_mut(&mut self, color: Color) {
+        self.color = color;
+    }
+
+    fn set_flip_mut(&mut self) {
+        let current_color = self.color;
+        self.set_color_mut(current_color.flip());
     }
 }
 
@@ -255,7 +321,7 @@ where
     unsafe fn remove_mut_unchecked(&mut self, value: &V) -> Option<V> {
         let node_to_be_deleted = self.find_nearest_node(value).hit_then(|node| node)?;
         let optional_node_direction = node_to_be_deleted.as_ref().direction();
-        let original_color = node_to_be_deleted.as_ref().color;
+        let original_color = node_to_be_deleted.color();
         let optional_parent = node_to_be_deleted.as_ref().parent;
         let optional_left_child = node_to_be_deleted.as_ref().left;
         let optional_right_child = node_to_be_deleted.as_ref().right;
@@ -274,7 +340,7 @@ where
                 let boxed_node_to_be_deleted = Box::from_raw(node_to_be_deleted.as_ptr());
 
                 // transplant color for successor
-                x.as_mut().color = original_color;
+                x.set_color_mut(original_color);
 
                 if let Some(direction) = optional_node_direction {
                     // if it has a direction it's safe to unwrap.
@@ -364,7 +430,7 @@ where
                     left.as_mut().parent = Some(y);
                 }
 
-                y.as_mut().color = boxed_node_to_be_deleted.color;
+                y.set_color_mut(boxed_node_to_be_deleted.color());
 
                 if original_color == Color::Black {
                     // safe to unwrap, cant reach unless x isn't root.
@@ -414,11 +480,9 @@ where
         let base_node_direction = base.direction()?;
         let parent = base.parent?.as_ref();
         let parent_direction = parent.direction()?;
-        let uncle_color = base
-            .uncle()
-            .map_or(Color::Black, |uncle| uncle.as_ref().color);
+        let uncle_color = base.uncle().color();
 
-        if parent.color == Color::Red {
+        if parent.color() == Color::Red {
             if uncle_color == Color::Red {
                 Some(InsertRebalance::Recolor(base_node))
             } else {
@@ -449,46 +513,42 @@ where
         x_direction: Direction,
         mut optional_x_parent: Option<NodeRef<V>>,
     ) {
-        while optional_x_parent.is_some()
-            && x.map_or(Color::Black, |node| node.as_ref().color) == Color::Black
-        {
+        while optional_x_parent.is_some() && x.color() == Color::Black {
             let mut x_parent = optional_x_parent.unwrap();
             match x_direction {
                 Direction::Left => {
                     let mut optional_w = x_parent.as_ref().right;
                     if let Some(mut w) = optional_w {
-                        if w.as_ref().color == Color::Red {
-                            w.as_mut().color = Color::Black;
-                            x_parent.as_mut().color = Color::Red;
+                        if w.color() == Color::Red {
+                            w.set_color_mut(Color::Black);
+                            x_parent.set_color_mut(Color::Red);
                             self.rotate_left_mut(x_parent);
                             optional_w = x_parent.as_ref().right;
                         }
 
                         let w_left_child = w.as_ref().left;
-                        let w_left_child_color =
-                            w_left_child.map_or(Color::Black, |node| node.as_ref().color);
+                        let w_left_child_color = w_left_child.color();
                         let w_right_child = w.as_ref().right;
-                        let w_right_child_color =
-                            w_right_child.map_or(Color::Black, |node| node.as_ref().color);
+                        let w_right_child_color = w_right_child.color();
                         if w_left_child_color == Color::Black && w_right_child_color == Color::Black
                         {
-                            w.as_mut().color = Color::Red;
+                            w.set_color_mut(Color::Red);
                             optional_x_parent = x_parent.as_ref().parent;
                             x = Some(x_parent)
                         } else {
                             if w_right_child_color == Color::Black {
                                 if let Some(mut w_left_child) = w_left_child {
-                                    w_left_child.as_mut().color = Color::Black;
+                                    w_left_child.set_color_mut(Color::Black);
                                 }
-                                w.as_mut().color = Color::Red;
+                                w.set_color_mut(Color::Red);
                                 self.rotate_right_mut(w);
                                 optional_w = x_parent.as_ref().right;
                             }
 
-                            w.as_mut().color = x_parent.as_ref().color;
-                            x_parent.as_mut().color = Color::Black;
+                            w.set_color_mut(x_parent.color());
+                            x_parent.set_color_mut(Color::Black);
                             if let Some(mut w_right_child) = w_right_child {
-                                w_right_child.as_mut().color = Color::Black;
+                                w_right_child.set_color_mut(Color::Black);
                             }
                             self.rotate_left_mut(x_parent);
                             x = self.root;
@@ -499,38 +559,36 @@ where
                 Direction::Right => {
                     let mut optional_w = x_parent.as_ref().left;
                     if let Some(mut w) = optional_w {
-                        if w.as_ref().color == Color::Red {
-                            w.as_mut().color = Color::Black;
-                            x_parent.as_mut().color = Color::Red;
+                        if w.color() == Color::Red {
+                            w.set_color_mut(Color::Black);
+                            x_parent.set_color_mut(Color::Red);
                             self.rotate_right_mut(x_parent);
                             optional_w = x_parent.as_ref().left;
                         }
 
                         let w_left_child = w.as_ref().left;
-                        let w_left_child_color =
-                            w_left_child.map_or(Color::Black, |node| node.as_ref().color);
+                        let w_left_child_color = w_left_child.color();
                         let w_right_child = w.as_ref().right;
-                        let w_right_child_color =
-                            w_right_child.map_or(Color::Black, |node| node.as_ref().color);
+                        let w_right_child_color = w_right_child.color();
                         if w_left_child_color == Color::Black && w_right_child_color == Color::Black
                         {
-                            w.as_mut().color = Color::Red;
+                            w.set_color_mut(Color::Red);
                             optional_x_parent = x_parent.as_ref().parent;
                             x = Some(x_parent)
                         } else {
                             if w_right_child_color == Color::Black {
                                 if let Some(mut w_left_child) = w_left_child {
-                                    w_left_child.as_mut().color = Color::Black;
+                                    w_left_child.set_color_mut(Color::Black);
                                 }
-                                w.as_mut().color = Color::Red;
+                                w.set_color_mut(Color::Red);
                                 self.rotate_left_mut(w);
                                 optional_w = x_parent.as_ref().left;
                             }
 
-                            w.as_mut().color = x_parent.as_ref().color;
-                            x_parent.as_mut().color = Color::Black;
+                            w.set_color_mut(x_parent.as_ref().color);
+                            x_parent.set_color_mut(Color::Black);
                             if let Some(mut w_left_child) = w_left_child {
-                                w_left_child.as_mut().color = Color::Black;
+                                w_left_child.set_color_mut(Color::Black);
                             }
                             self.rotate_right_mut(x_parent);
                             x = self.root;
@@ -635,7 +693,7 @@ where
 
         // if grandparent is black, flip to red and recurse up.
         let grandparent = base.grandparent()?.as_mut();
-        match grandparent.color {
+        match grandparent.color() {
             Color::Red => None,
             Color::Black => {
                 grandparent.color = Color::Red;
@@ -653,9 +711,9 @@ where
         self.rotate_right_mut(grandparent);
 
         // flip the colors of the original grandparent and parent
-        let grandparent_color = grandparent.as_ref().color;
+        let grandparent_color = grandparent.color();
         grandparent.as_mut().color = grandparent_color.flip();
-        let parent_color = parent.as_ref().color;
+        let parent_color = parent.color();
         parent.as_mut().color = parent_color.flip();
     }
 
@@ -680,9 +738,9 @@ where
         self.rotate_left_mut(grandparent);
 
         // flip the colors of the original grandparent and parent
-        let grandparent_color = grandparent.as_ref().color;
+        let grandparent_color = grandparent.color();
         grandparent.as_mut().color = grandparent_color.flip();
-        let parent_color = parent.as_ref().color;
+        let parent_color = parent.color();
         parent.as_mut().color = parent_color.flip();
     }
 
@@ -851,15 +909,15 @@ mod tests {
 
         let root = unsafe {
             tree.find_nearest_node(&root_val)
-                .hit_then(|node| node.as_ref().color)
+                .hit_then(|node| node.color())
         };
         let left = unsafe {
             tree.find_nearest_node(&left_val)
-                .hit_then(|node| node.as_ref().color)
+                .hit_then(|node| node.color())
         };
         let right = unsafe {
             tree.find_nearest_node(&right_val)
-                .hit_then(|node| node.as_ref().color)
+                .hit_then(|node| node.color())
         };
 
         assert_eq!(Some(Color::Black), root);
