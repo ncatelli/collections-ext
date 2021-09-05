@@ -1,5 +1,6 @@
 use std::ptr::NonNull;
 
+/// NodeRef represents a Non-Null pointer to a Node.
 type NodeRef<V> = NonNull<Node<V>>;
 
 /// Represents a type that has a Color representation in the tree.
