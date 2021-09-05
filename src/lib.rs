@@ -3,13 +3,13 @@ use std::ptr::NonNull;
 type NodeRef<V> = NonNull<Node<V>>;
 
 /// Represents a type that has a Color representation in the tree.
-trait Colored {
+trait Colorable {
     /// Returns the color of a specific item.
     fn color(&self) -> Color;
 }
 
 /// A subtype of the `Colored` trait that allows for mutation of its color
-trait ColoredMut: Colored {
+trait ColorableMut: Colorable {
     /// Sets the color of an object to a passed color.
     fn set_color_mut(&mut self, color: Color);
     /// Inverts the color of a node.
@@ -17,14 +17,14 @@ trait ColoredMut: Colored {
     fn set_flip_mut(&mut self);
 }
 
-impl<V> Colored for NodeRef<V> {
+impl<V> Colorable for NodeRef<V> {
     fn color(&self) -> Color {
         let node = unsafe { self.as_ref() };
         node.color
     }
 }
 
-impl<V> ColoredMut for NodeRef<V> {
+impl<V> ColorableMut for NodeRef<V> {
     fn set_color_mut(&mut self, color: Color) {
         let mut node = unsafe { self.as_mut() };
         node.color = color;
@@ -37,7 +37,7 @@ impl<V> ColoredMut for NodeRef<V> {
     }
 }
 
-impl<V> Colored for Option<NodeRef<V>> {
+impl<V> Colorable for Option<NodeRef<V>> {
     fn color(&self) -> Color {
         match self {
             Some(noderef) => noderef.color(),
@@ -46,7 +46,7 @@ impl<V> Colored for Option<NodeRef<V>> {
     }
 }
 
-impl<V> ColoredMut for Option<NodeRef<V>> {
+impl<V> ColorableMut for Option<NodeRef<V>> {
     fn set_color_mut(&mut self, color: Color) {
         if let Some(mut noderef) = self {
             noderef.set_color_mut(color)
@@ -177,13 +177,13 @@ where
     }
 }
 
-impl<V> Colored for Node<V> {
+impl<V> Colorable for Node<V> {
     fn color(&self) -> Color {
         self.color
     }
 }
 
-impl<V> ColoredMut for Node<V> {
+impl<V> ColorableMut for Node<V> {
     fn set_color_mut(&mut self, color: Color) {
         self.color = color;
     }
