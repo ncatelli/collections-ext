@@ -4,6 +4,25 @@ use std::ptr::NonNull;
 type NodeRef<V> = NonNull<Node<V>>;
 
 /// Represents a type that has a Color representation in the tree.
+trait Directional {
+    /// Returns the direction of a node if the node is not the root of the tree.
+    /// Otherwise `None` is returned.
+    fn direction(&self) -> Option<Direction>;
+}
+
+impl<V> Directional for NodeRef<V>
+where
+    Node<V>: Directional,
+{
+    fn direction(&self) -> Option<Direction> {
+        unsafe {
+            let node = self.as_ref();
+            node.direction()
+        }
+    }
+}
+
+/// Represents a type that has a Color representation in the tree.
 trait Colorable {
     /// Returns the color of a specific item.
     fn color(&self) -> Color;
@@ -148,15 +167,6 @@ where
         }
     }
 
-    unsafe fn direction(&self) -> Option<Direction> {
-        let parent = self.parent?.as_ref();
-
-        match parent.left {
-            Some(left_node) if left_node.as_ref().inner == self.inner => Some(Direction::Left),
-            _ => Some(Direction::Right),
-        }
-    }
-
     unsafe fn sibling(&self) -> Option<NodeRef<V>> {
         let direction = self.direction()?;
         let parent = self.parent?.as_ref();
@@ -175,6 +185,22 @@ where
     unsafe fn uncle(&self) -> Option<NodeRef<V>> {
         let parent = self.parent?.as_ref();
         parent.sibling()
+    }
+}
+
+impl<V> Directional for Node<V>
+where
+    V: PartialEq,
+{
+    fn direction(&self) -> Option<Direction> {
+        unsafe {
+            let parent = self.parent?.as_ref();
+
+            match parent.left {
+                Some(left_node) if left_node.as_ref().inner == self.inner => Some(Direction::Left),
+                _ => Some(Direction::Right),
+            }
+        }
     }
 }
 
