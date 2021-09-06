@@ -4,7 +4,7 @@ use rbtree::RedBlackTree;
 pub fn insertion(c: &mut Criterion) {
     let mut group = c.benchmark_group("insertion into the tree");
 
-    (0..5)
+    (0..10)
         .map(|multiple| 2usize.pow(multiple))
         .for_each(|sample_size| {
             group.throughput(Throughput::Elements(sample_size as u64));

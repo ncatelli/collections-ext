@@ -379,7 +379,7 @@ where
             }
             SearchResult::Miss(mut parent_node) => {
                 let is_left = value < parent_node.as_ref().inner;
-                let child = Box::new(Node::new(Color::Red, value, Some(parent_node), None, None));
+                let child = Node::new(Color::Red, value, Some(parent_node), None, None);
                 let child_ptr = NodeRef::from(child);
                 if is_left {
                     parent_node.as_mut().left = Some(child_ptr);
@@ -455,6 +455,9 @@ where
                         Direction::Left => parent.as_mut().left = None,
                         Direction::Right => parent.as_mut().right = None,
                     };
+                } else {
+                    // Mark the tree as empty if this is the last node.
+                    self.root = None;
                 }
 
                 // Take ownership of the inner value
@@ -896,6 +899,7 @@ where
     }
 }
 
+/*
 impl<T> Drop for RedBlackTree<T>
 where
     T: PartialOrd + PartialEq,
@@ -908,7 +912,7 @@ where
                 let min = value;
                 let max = self.max();
                 let is_last_node = Some(min) == max;
-                let node = self.find_nearest_node(min).hit_then(|node| node).unwrap();
+                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
                 let direction = node.as_ref().direction();
                 if let Some(mut parent) = node.as_ref().parent {
                     // parent assertion makes unwrap safe
@@ -924,13 +928,34 @@ where
                         Box::from_raw(node_ptr);
                         break;
                     } else {
-                        next = self.max();
+                        next = max;
                         continue;
                     }
                 }
 
                 let node_ptr = node.as_ptr();
                 Box::from_raw(node_ptr);
+                next = self.min();
+            }
+
+            self.root = None;
+        }
+    }
+}
+*/
+
+impl<T> Drop for RedBlackTree<T>
+where
+    T: PartialOrd + PartialEq,
+{
+    fn drop(&mut self) {
+        unsafe {
+            let mut next = self.min();
+            while let Some(value) = next {
+                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
+                let inner_val = &node.as_ptr().as_ref().unwrap().inner;
+                self.remove_mut(inner_val);
+
                 next = self.min();
             }
 
