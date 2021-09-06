@@ -298,7 +298,7 @@ impl<T> SearchResult<T> {
 }
 
 /// An implementation of a Red-Black Tree
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RedBlackTree<T>
 where
     T: PartialEq + PartialOrd,
