@@ -298,7 +298,7 @@ impl<T> SearchResult<T> {
 }
 
 /// An implementation of a Red-Black Tree
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RedBlackTree<T>
 where
     T: PartialEq + PartialOrd,
@@ -455,6 +455,9 @@ where
                         Direction::Left => parent.as_mut().left = None,
                         Direction::Right => parent.as_mut().right = None,
                     };
+                } else {
+                    // Mark the tree as empty if this is the last node.
+                    self.root = None;
                 }
 
                 // Take ownership of the inner value
@@ -896,30 +899,67 @@ where
     }
 }
 
+/*
 impl<T> Drop for RedBlackTree<T>
 where
-    T: PartialOrd,
+    T: PartialOrd + PartialEq,
 {
     fn drop(&mut self) {
         unsafe {
-            while let Some(value) = self.min() {
+            let mut next = self.min();
+            while let Some(value) = next {
                 // if min returns a value, this is safe to unwrap
+                let min = value;
+                let max = self.max();
+                let is_last_node = Some(min) == max;
                 let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
                 let direction = node.as_ref().direction();
                 if let Some(mut parent) = node.as_ref().parent {
-                    match direction {
-                        Some(Direction::Left) => parent.as_mut().left = None,
-                        Some(Direction::Right) => parent.as_mut().right = None,
-                        None => self.root = None,
+                    // parent assertion makes unwrap safe
+                    match direction.unwrap() {
+                        Direction::Left => parent.as_mut().left = None,
+                        Direction::Right => parent.as_mut().right = None,
                     }
                 } else {
                     // if current node is the root, make sure to clear the root field.
-                    self.root = None
+                    if is_last_node {
+                        // clean up the root
+                        let node_ptr = node.as_ptr();
+                        Box::from_raw(node_ptr);
+                        break;
+                    } else {
+                        next = max;
+                        continue;
+                    }
                 }
 
                 let node_ptr = node.as_ptr();
                 Box::from_raw(node_ptr);
+                next = self.min();
             }
+
+            self.root = None;
+        }
+    }
+}
+*/
+
+impl<T> Drop for RedBlackTree<T>
+where
+    T: PartialOrd + PartialEq,
+{
+    fn drop(&mut self) {
+        unsafe {
+            let mut next = self.min();
+            while let Some(value) = next {
+                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
+                let inner_val = &node.as_ptr().as_ref().unwrap().inner;
+                self.remove_mut(inner_val);
+
+                next = self.min();
+            }
+
+            self.root = None;
         }
     }
 }
@@ -957,7 +997,7 @@ where
 
 impl<'a, V: 'a> Iterator for IterInOrder<'a, V>
 where
-    V: PartialEq + PartialOrd + Default + 'a,
+    V: PartialEq + PartialOrd + 'a,
 {
     type Item = &'a V;
 

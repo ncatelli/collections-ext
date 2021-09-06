@@ -6,8 +6,13 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - run: rustup component add clippy
+      - uses: actions/checkout@v2
+      - name: Stable with rustfmt and clippy
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustfmt, clippy
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -19,3 +24,24 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
+  leak_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install valgrind
+        run: sudo apt-get install valgrind
+      - name: Stable with rustfmt and clippy
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Install cargo-valgrind
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-valgrind
+      - name: Run valgrind against basic example
+        uses: actions-rs/cargo@v1
+        with:
+          command: valgrind
+          args: run --example basic
