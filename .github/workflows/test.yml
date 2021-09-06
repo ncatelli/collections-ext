@@ -36,8 +36,11 @@ jobs:
           toolchain: stable
           components: rustfmt
       - name: Install cargo-valgrind
-        run: cargo install cargo-valgrind
-      - name: Release build
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-valgrind
+      - name: Run valgrind against basic example
         uses: actions-rs/cargo@v1
         with:
           command: valgrind
