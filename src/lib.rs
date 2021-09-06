@@ -216,11 +216,11 @@ where
         }
     }
 
-    unsafe fn parent(&self) -> Option<NodeRef<T>> {
+    fn parent(&self) -> Option<NodeRef<T>> {
         self.parent
     }
 
-    unsafe fn sibling(&self) -> Option<NodeRef<T>> {
+    fn sibling(&self) -> Option<NodeRef<T>> {
         let direction = self.direction()?;
         let parent = self.parent?;
 
@@ -230,11 +230,11 @@ where
         }
     }
 
-    unsafe fn grandparent(&self) -> Option<NodeRef<T>> {
+    fn grandparent(&self) -> Option<NodeRef<T>> {
         self.parent.and_then(|parent| parent.as_ref().parent)
     }
 
-    unsafe fn uncle(&self) -> Option<NodeRef<T>> {
+    fn uncle(&self) -> Option<NodeRef<T>> {
         self.parent.and_then(|parent| parent.as_ref().sibling())
     }
 }
