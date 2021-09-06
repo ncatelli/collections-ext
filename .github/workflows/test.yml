@@ -33,7 +33,6 @@ jobs:
       - name: Stable with rustfmt and clippy
         uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           components: cargo-valgrind
       - name: Release build
