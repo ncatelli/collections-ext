@@ -379,7 +379,7 @@ where
             }
             SearchResult::Miss(mut parent_node) => {
                 let is_left = value < parent_node.as_ref().inner;
-                let child = Node::new(Color::Red, value, Some(parent_node), None, None);
+                let child = Box::new(Node::new(Color::Red, value, Some(parent_node), None, None));
                 let child_ptr = NodeRef::from(child);
                 if is_left {
                     parent_node.as_mut().left = Some(child_ptr);
@@ -898,28 +898,43 @@ where
 
 impl<T> Drop for RedBlackTree<T>
 where
-    T: PartialOrd,
+    T: PartialOrd + PartialEq,
 {
     fn drop(&mut self) {
         unsafe {
-            while let Some(value) = self.min() {
+            let mut next = self.min();
+            while let Some(value) = next {
                 // if min returns a value, this is safe to unwrap
-                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
+                let min = value;
+                let max = self.max();
+                let is_last_node = Some(min) == max;
+                let node = self.find_nearest_node(min).hit_then(|node| node).unwrap();
                 let direction = node.as_ref().direction();
                 if let Some(mut parent) = node.as_ref().parent {
-                    match direction {
-                        Some(Direction::Left) => parent.as_mut().left = None,
-                        Some(Direction::Right) => parent.as_mut().right = None,
-                        None => self.root = None,
+                    // parent assertion makes unwrap safe
+                    match direction.unwrap() {
+                        Direction::Left => parent.as_mut().left = None,
+                        Direction::Right => parent.as_mut().right = None,
                     }
                 } else {
                     // if current node is the root, make sure to clear the root field.
-                    self.root = None
+                    if is_last_node {
+                        // clean up the root
+                        let node_ptr = node.as_ptr();
+                        Box::from_raw(node_ptr);
+                        break;
+                    } else {
+                        next = self.max();
+                        continue;
+                    }
                 }
 
                 let node_ptr = node.as_ptr();
                 Box::from_raw(node_ptr);
+                next = self.min();
             }
+
+            self.root = None;
         }
     }
 }
@@ -957,7 +972,7 @@ where
 
 impl<'a, V: 'a> Iterator for IterInOrder<'a, V>
 where
-    V: PartialEq + PartialOrd + Default + 'a,
+    V: PartialEq + PartialOrd + 'a,
 {
     type Item = &'a V;
 

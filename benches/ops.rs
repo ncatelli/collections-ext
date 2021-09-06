@@ -13,7 +13,7 @@ pub fn insertion(c: &mut Criterion) {
                 &sample_size,
                 |b, &s| {
                     b.iter(|| {
-                        let populated_tree = (0..s)
+                        let _populated_tree = (0..s)
                             .fold(RedBlackTree::default(), |tree, x| tree.insert(black_box(x)));
                     })
                 },
