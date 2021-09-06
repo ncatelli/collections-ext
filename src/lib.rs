@@ -1212,4 +1212,18 @@ mod tests {
             new_root.and_then(|c| c.as_ref().right)
         );
     }
+
+    #[test]
+    fn should_retain_order_after_deletion() {
+        let tree = (0..1024)
+            .rev()
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .remove(&511)
+            .remove(&512);
+
+        let received: Vec<u16> = tree.traverse_in_order().copied().collect();
+        // skip 511 and 512
+        let expected: Vec<u16> = (0..511).chain(513..1024).collect();
+        assert_eq!(expected, received);
+    }
 }
