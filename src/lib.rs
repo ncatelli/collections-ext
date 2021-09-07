@@ -1,4 +1,9 @@
-use std::ptr::NonNull;
+#![no_std]
+
+use core::ptr::NonNull;
+
+extern crate alloc;
+use alloc::{boxed::Box, vec::Vec};
 
 /// Represents a type that has a Color representation in the tree.
 trait Directional {
@@ -977,7 +982,7 @@ pub struct IterInOrder<'a, T>
 where
     T: PartialEq + PartialOrd + 'a,
 {
-    inner: std::marker::PhantomData<&'a RedBlackTree<T>>,
+    inner: core::marker::PhantomData<&'a RedBlackTree<T>>,
     left_most_node: Option<NodeRef<T>>,
     stack: Vec<NodeRef<T>>,
 }
@@ -988,7 +993,7 @@ where
 {
     pub fn new(inner: &'a RedBlackTree<T>) -> Self {
         Self {
-            inner: std::marker::PhantomData,
+            inner: core::marker::PhantomData,
             left_most_node: inner.root,
             stack: Vec::new(),
         }
@@ -1020,6 +1025,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    extern crate alloc;
+    use alloc::vec;
 
     #[test]
     fn should_return_correct_empty_state_when_tree_has_values() {
