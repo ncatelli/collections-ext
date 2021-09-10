@@ -904,51 +904,6 @@ where
     }
 }
 
-/*
-impl<T> Drop for RedBlackTree<T>
-where
-    T: PartialOrd + PartialEq,
-{
-    fn drop(&mut self) {
-        unsafe {
-            let mut next = self.min();
-            while let Some(value) = next {
-                // if min returns a value, this is safe to unwrap
-                let min = value;
-                let max = self.max();
-                let is_last_node = Some(min) == max;
-                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
-                let direction = node.as_ref().direction();
-                if let Some(mut parent) = node.as_ref().parent {
-                    // parent assertion makes unwrap safe
-                    match direction.unwrap() {
-                        Direction::Left => parent.as_mut().left = None,
-                        Direction::Right => parent.as_mut().right = None,
-                    }
-                } else {
-                    // if current node is the root, make sure to clear the root field.
-                    if is_last_node {
-                        // clean up the root
-                        let node_ptr = node.as_ptr();
-                        Box::from_raw(node_ptr);
-                        break;
-                    } else {
-                        next = max;
-                        continue;
-                    }
-                }
-
-                let node_ptr = node.as_ptr();
-                Box::from_raw(node_ptr);
-                next = self.min();
-            }
-
-            self.root = None;
-        }
-    }
-}
-*/
-
 impl<T> Drop for RedBlackTree<T>
 where
     T: PartialOrd + PartialEq,
