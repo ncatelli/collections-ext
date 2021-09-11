@@ -17,9 +17,6 @@
 ## General
 This repo is intended to function as a catch-all bucket for datastructures that I am working with for side projects and learning purposes.
 
-### Note
-All collections must function without a need for stdlib by default.
-
 ## Usage
 ### Testing
 Tests and documentation are provided primarily via docstring examples primarily but a few tests are additionally provided through standard rust unit testing and can be run via:
