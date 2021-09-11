@@ -8,6 +8,7 @@
 	- [Usage](#usage)
 		- [Testing](#testing)
 			- [Benchmark tests](#benchmark-tests)
+		- [Features](#features)
 	- [Warnings](#warnings)
 
 <!-- /TOC -->
@@ -29,6 +30,10 @@ Additionally benchmark tests are provided via `criterion` and can be run via:
 ```
 cargo bench
 ```
+
+### Features
+
+- `std`: Enable the standard library. Disabled by default for core.
 
 ## Warnings
 Please nobody use this. This is entirely an experiment to support insane restrictions I've imposed on myself to build a computer from first principles.
