@@ -1,5 +1,5 @@
+use collections_ext::RedBlackTree;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rbtree::RedBlackTree;
 
 pub fn insertion(c: &mut Criterion) {
     let mut group = c.benchmark_group("insertion into the tree");
