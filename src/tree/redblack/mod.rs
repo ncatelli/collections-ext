@@ -1,7 +1,5 @@
 //! Provides an implementation of a Red-Black Tree for use as a priority queue.
 
-#![no_std]
-
 use core::ptr::NonNull;
 
 extern crate alloc;

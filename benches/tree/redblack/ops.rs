@@ -1,4 +1,4 @@
-use collections_ext::RedBlackTree;
+use collections_ext::tree::redblack::RedBlackTree;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 pub fn insertion(c: &mut Criterion) {

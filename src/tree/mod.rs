@@ -1,3 +1,3 @@
 //! Provides a catch-all for tree implementations not currently implemented in stdlib.
 
-pub mod rbtree;
+pub mod redblack;
