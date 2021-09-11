@@ -40,8 +40,8 @@ jobs:
         with:
           command: install
           args: cargo-valgrind
-      - name: Run valgrind against basic example
+      - name: Run valgrind against redblack tree basic example
         uses: actions-rs/cargo@v1
         with:
           command: valgrind
-          args: run --example basic
+          args: run --example redblack_tree_basic
