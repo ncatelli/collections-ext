@@ -5,7 +5,6 @@
 - [collections-ext](#collections-ext)
 	- [Table of Contents](#table-of-contents)
 	- [General](#general)
-		- [Note](#note)
 	- [Usage](#usage)
 		- [Testing](#testing)
 			- [Benchmark tests](#benchmark-tests)
