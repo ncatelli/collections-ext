@@ -1,4 +1,4 @@
-use rbtree::RedBlackTree;
+use collections_ext::tree::redblack::RedBlackTree;
 
 fn main() {
     let populated_tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x));

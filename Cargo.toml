@@ -1,5 +1,5 @@
 [package]
-name = "rbtree"
+name = "collections-ext"
 version = "0.1.0"
 edition = "2018"
 
@@ -7,7 +7,8 @@ edition = "2018"
 criterion = "0.3"
 
 [[bench]]
-name = "ops"
+name = "red_black_tree_operations"
+path = "benches/tree/redblack/ops.rs"
 harness = false
 
 [dependencies]

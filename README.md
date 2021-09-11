@@ -1,2 +1,34 @@
-# rbtree
-A red-black tree implementation for learning purposes
+# collections-ext
+## Table of Contents
+<!-- TOC -->
+
+- [collections-ext](#collections-ext)
+	- [Table of Contents](#table-of-contents)
+	- [General](#general)
+	- [Usage](#usage)
+		- [Testing](#testing)
+			- [Benchmark tests](#benchmark-tests)
+	- [Warnings](#warnings)
+
+<!-- /TOC -->
+
+## General
+This repo is intended to function as a catch-all bucket for datastructures that I am working with for side projects and learning purposes.
+
+## Usage
+### Testing
+Tests and documentation are provided primarily via docstring examples primarily but a few tests are additionally provided through standard rust unit testing and can be run via:
+
+```
+cargo test
+```
+
+#### Benchmark tests
+Additionally benchmark tests are provided via `criterion` and can be run via:
+
+```
+cargo bench
+```
+
+## Warnings
+Please nobody use this. This is entirely an experiment to support insane restrictions I've imposed on myself to build a computer from first principles.
