@@ -763,7 +763,6 @@ where
         Some(z)
     }
 
-    #[allow(clippy::redundant_closure)]
     unsafe fn recolor_on_insertion_mut(
         &mut self,
         base_node_ref: NodeRef<T>,
