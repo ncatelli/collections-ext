@@ -26,6 +26,11 @@ jobs:
         command: test
   leak_test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example_bin:
+          - redblack_tree_basic
+          - binary_tree_basic 
     steps:
       - uses: actions/checkout@v2
       - name: Install valgrind
@@ -40,8 +45,8 @@ jobs:
         with:
           command: install
           args: cargo-valgrind
-      - name: Run valgrind against redblack tree basic example
+      - name: Run valgrind against ${{ matrix.example_bin }} example
         uses: actions-rs/cargo@v1
         with:
           command: valgrind
-          args: run --example redblack_tree_basic
+          args: run --example ${{ matrix.example_bin }}
