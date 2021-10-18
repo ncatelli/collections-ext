@@ -26,10 +26,11 @@ jobs:
         command: test
   leak_test:
     runs-on: ubuntu-latest
-    matrix:
-      example_bin:
-        - redblack_tree_basic
-        - binary_tree_basic 
+    strategy:
+      matrix:
+        example_bin:
+          - redblack_tree_basic
+          - binary_tree_basic 
     steps:
       - uses: actions/checkout@v2
       - name: Install valgrind
