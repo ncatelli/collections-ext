@@ -470,17 +470,6 @@ where
                 Some(inner)
             }
             DeleteSuccessor::Double(in_order_successor) => {
-                /*
-                    Assign the minimum of right subtree of noteToBeDeleted into y.
-                    Save the color of y in originalColor.
-                    Assign the rightChild of y into x.
-                    If y is a child of nodeToBeDeleted, then set the parent of x as y.
-                    Else, transplant y with rightChild of y.
-                    Transplant nodeToBeDeleted with y.
-                    Set the color of y with originalColor.
-
-                If the originalColor is BLACK, call DeleteFix(x).
-                 */
                 // convert to a box so it is dropped
                 let boxed_node_to_be_deleted = Box::from_raw(node_to_be_deleted.as_ptr());
                 let mut y =
