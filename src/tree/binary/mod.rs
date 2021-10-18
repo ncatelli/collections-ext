@@ -106,11 +106,15 @@ where
         }
     }
 
+    /// Inserts a value `T` into the tree returning a the modified tree in
+    /// place.
     pub fn insert(mut self, value: T) -> Self {
         self.insert_mut(value);
         self
     }
 
+    /// Inserts a value `T` into the tree. If the value already exists in the
+    /// tree, nothing is done.
     pub fn insert_mut(&mut self, value: T) {
         unsafe { self.insert_mut_unchecked(value) }
     }
@@ -136,11 +140,13 @@ where
         };
     }
 
+    /// Remove a value, `T`, from the tree, returning the modifed tree.
     pub fn remove(mut self, value: &T) -> Self {
         self.remove_mut(value);
         self
     }
 
+    /// Remove a value, `T`, from the tree in place.
     pub fn remove_mut(&mut self, value: &T) -> Option<T> {
         unsafe { self.remove_mut_unchecked(value) }
     }
