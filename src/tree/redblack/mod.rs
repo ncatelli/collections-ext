@@ -1,16 +1,10 @@
 //! Provides an implementation of a Red-Black Tree for use as a priority queue.
 
+use super::{Direction, Directional};
 use core::ptr::NonNull;
 
 extern crate alloc;
 use alloc::{boxed::Box, vec::Vec};
-
-/// Represents a type that has a Color representation in the tree.
-trait Directional {
-    /// Returns the direction of a node if the node is not the root of the tree.
-    /// Otherwise `None` is returned.
-    fn direction(&self) -> Option<Direction>;
-}
 
 /// Represents a type that has a Color representation in the tree.
 trait Colorable {
@@ -132,14 +126,6 @@ impl<T> core::convert::AsMut<Node<T>> for NodeRef<T> {
     fn as_mut(&mut self) -> &mut Node<T> {
         unsafe { self.0.as_mut() }
     }
-}
-
-/// Direction represents the directional branch that a given child is on for
-/// a given node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Direction {
-    Left,
-    Right,
 }
 
 /// Represents the three possible situations that a node can encounter on a delete,
