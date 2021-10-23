@@ -8,9 +8,9 @@ use alloc::{boxed::Box, vec::Vec};
 #[derive(Clone, Copy, PartialEq)]
 enum DeleteSuccessor<T> {
     /// Node has two children. Return the in-order successor.
-    Double(Option<NodeRef<T>>),
+    Double(Option<NodeRef<T, ()>>),
     /// Node has a single child.
-    Single(NodeRef<T>),
+    Single(NodeRef<T, ()>),
     /// Node has no children (is a leaf or root).
     /// Can be deleted directly.
     None,
@@ -21,10 +21,10 @@ enum DeleteSuccessor<T> {
 enum SearchResult<T> {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
-    Hit(NodeRef<T>),
+    Hit(NodeRef<T, ()>),
     /// Miss represents the value was not found in the tree and represents the
     /// nearest parent node.
-    Miss(NodeRef<T>),
+    Miss(NodeRef<T, ()>),
     /// Empty represents an empty tree.
     Empty,
 }
@@ -34,7 +34,7 @@ impl<T> SearchResult<T> {
     /// `f` wrapped in `Some` otherwise `None` is returned.
     fn hit_then<F, B>(self, f: F) -> Option<B>
     where
-        F: Fn(NodeRef<T>) -> B,
+        F: Fn(NodeRef<T, ()>) -> B,
     {
         match self {
             SearchResult::Hit(node) => Some(f(node)),
@@ -49,7 +49,7 @@ pub struct BinaryTree<T>
 where
     T: PartialEq + PartialOrd,
 {
-    root: Option<NodeRef<T>>,
+    root: Option<NodeRef<T, ()>>,
 }
 
 impl<T> BinaryTree<T>
@@ -58,7 +58,7 @@ where
 {
     /// Instantiates a new Binary tree from an initial value.
     pub fn new(root: T) -> Self {
-        let node = Node::new(root, None, None, None);
+        let node = Node::new(root, None, None, None, ());
         let root_ptr = NodeRef::from(node);
 
         Self {
@@ -124,12 +124,12 @@ where
         match nearest {
             SearchResult::Hit(_) => (),
             SearchResult::Empty => {
-                let node = Node::new(value, None, None, None);
+                let node = Node::new(value, None, None, None, ());
                 self.root = Some(NodeRef::from(node));
             }
             SearchResult::Miss(mut parent_node) => {
                 let is_left = value < parent_node.as_ref().inner;
-                let child = Node::new(value, Some(parent_node), None, None);
+                let child = Node::new(value, Some(parent_node), None, None, ());
                 let child_ptr = NodeRef::from(child);
                 if is_left {
                     parent_node.as_mut().left = Some(child_ptr);
@@ -251,7 +251,7 @@ where
         }
     }
 
-    unsafe fn find_in_order_successor(&self, node: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn find_in_order_successor(&self, node: NodeRef<T, ()>) -> Option<NodeRef<T, ()>> {
         let optional_right_child = node.as_ref().right;
 
         optional_right_child.and_then(|child| self.find_min_from(child))
@@ -269,7 +269,7 @@ where
 
     /// Returns the node with the left-most value (smallest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn find_min_from(&self, base: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn find_min_from(&self, base: NodeRef<T, ()>) -> Option<NodeRef<T, ()>> {
         let mut current = Some(base);
         let mut left_most_node = current;
         while let Some(id) = current {
@@ -291,7 +291,7 @@ where
 
     /// Returns the node with the right-most value (largest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn find_max_from(&self, base_node_id: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn find_max_from(&self, base_node_id: NodeRef<T, ()>) -> Option<NodeRef<T, ()>> {
         let mut current = Some(base_node_id);
         let mut right_most_node = current;
         while let Some(id) = current {
@@ -341,8 +341,8 @@ where
     T: PartialEq + PartialOrd + 'a,
 {
     inner: core::marker::PhantomData<&'a BinaryTree<T>>,
-    left_most_node: Option<NodeRef<T>>,
-    stack: Vec<NodeRef<T>>,
+    left_most_node: Option<NodeRef<T, ()>>,
+    stack: Vec<NodeRef<T, ()>>,
 }
 
 impl<'a, T: 'a> IterInOrder<'a, T>

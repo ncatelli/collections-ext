@@ -1,16 +1,9 @@
 //! Provides an implementation of a Red-Black Tree for use as a priority queue.
 
-use core::ptr::NonNull;
+use super::{Direction, Directional, Node, NodeRef};
 
 extern crate alloc;
 use alloc::{boxed::Box, vec::Vec};
-
-/// Represents a type that has a Color representation in the tree.
-trait Directional {
-    /// Returns the direction of a node if the node is not the root of the tree.
-    /// Otherwise `None` is returned.
-    fn direction(&self) -> Option<Direction>;
-}
 
 /// Represents a type that has a Color representation in the tree.
 trait Colorable {
@@ -27,67 +20,27 @@ trait ColorableMut: Colorable {
     fn set_flip_mut(&mut self);
 }
 
-/// NodeRef represents a Non-Null pointer to a Node.
-#[derive(Debug, PartialEq)]
-struct NodeRef<T>(NonNull<Node<T>>);
-
-impl<T> NodeRef<T> {
-    /// Consumes the enclosing NodeRef, returning the wrapped raw pointer.
-    fn as_ptr(self) -> *mut Node<T> {
-        self.0.as_ptr()
-    }
-}
-
-impl<T> From<NonNull<Node<T>>> for NodeRef<T> {
-    fn from(ptr: NonNull<Node<T>>) -> Self {
-        Self(ptr)
-    }
-}
-
-impl<T> From<Node<T>> for NodeRef<T> {
-    fn from(node: Node<T>) -> Self {
-        let boxed_node = Box::new(node);
-        Self::from(boxed_node)
-    }
-}
-
-impl<T> From<Box<Node<T>>> for NodeRef<T> {
-    fn from(node: Box<Node<T>>) -> Self {
-        NonNull::new(Box::into_raw(node))
-            .map(NodeRef::from)
-            .expect("Box points to an invalid memory location")
-    }
-}
-
-impl<T> Clone for NodeRef<T> {
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
-
-impl<T> Copy for NodeRef<T> {}
-
-impl<T> Colorable for NodeRef<T> {
+impl<T> Colorable for NodeRef<T, Color> {
     fn color(&self) -> Color {
         let node = unsafe { self.0.as_ref() };
-        node.color
+        node.attributes
     }
 }
 
-impl<T> ColorableMut for NodeRef<T> {
+impl<T> ColorableMut for NodeRef<T, Color> {
     fn set_color_mut(&mut self, color: Color) {
         let mut node = unsafe { self.0.as_mut() };
-        node.color = color;
+        node.attributes = color;
     }
 
     fn set_flip_mut(&mut self) {
         let node = unsafe { self.0.as_mut() };
-        let current_color = node.color;
+        let current_color = node.attributes;
         node.set_color_mut(current_color.flip());
     }
 }
 
-impl<T> Colorable for Option<NodeRef<T>> {
+impl<T> Colorable for Option<NodeRef<T, Color>> {
     fn color(&self) -> Color {
         match self {
             Some(noderef) => noderef.color(),
@@ -96,7 +49,7 @@ impl<T> Colorable for Option<NodeRef<T>> {
     }
 }
 
-impl<T> ColorableMut for Option<NodeRef<T>> {
+impl<T> ColorableMut for Option<NodeRef<T, Color>> {
     fn set_color_mut(&mut self, color: Color) {
         if let Some(ref mut noderef) = self {
             noderef.set_color_mut(color)
@@ -110,45 +63,13 @@ impl<T> ColorableMut for Option<NodeRef<T>> {
     }
 }
 
-impl<T> Directional for NodeRef<T>
-where
-    Node<T>: Directional,
-{
-    fn direction(&self) -> Option<Direction> {
-        unsafe {
-            let node = self.0.as_ref();
-            node.direction()
-        }
-    }
-}
-
-impl<T> core::convert::AsRef<Node<T>> for NodeRef<T> {
-    fn as_ref(&self) -> &Node<T> {
-        unsafe { self.0.as_ref() }
-    }
-}
-
-impl<T> core::convert::AsMut<Node<T>> for NodeRef<T> {
-    fn as_mut(&mut self) -> &mut Node<T> {
-        unsafe { self.0.as_mut() }
-    }
-}
-
-/// Direction represents the directional branch that a given child is on for
-/// a given node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Direction {
-    Left,
-    Right,
-}
-
 /// Represents the three possible situations that a node can encounter on a delete,
 #[derive(Clone, Copy, PartialEq)]
 enum DeleteSuccessor<T> {
     /// Node has two children. Return the in-order successor.
-    Double(Option<NodeRef<T>>),
+    Double(Option<NodeRef<T, Color>>),
     /// Node has a single child.
-    Single(NodeRef<T>),
+    Single(NodeRef<T, Color>),
     /// Node has no children (is a leaf or root).
     /// Can be deleted directly.
     None,
@@ -157,15 +78,15 @@ enum DeleteSuccessor<T> {
 /// InsertRebalance captures the states of an insertion rebalance operation.
 enum InsertRebalance<T> {
     /// Represents a LeftLeft case of inbalance.
-    LeftLeft(NodeRef<T>),
+    LeftLeft(NodeRef<T, Color>),
     /// Represents a LeftRight case of inbalance.
-    LeftRight(NodeRef<T>),
+    LeftRight(NodeRef<T, Color>),
     /// Represents a RightRight case of inbalance.
-    RightRight(NodeRef<T>),
+    RightRight(NodeRef<T, Color>),
     /// Represents a RightLeft case of inbalance.
-    RightLeft(NodeRef<T>),
+    RightLeft(NodeRef<T, Color>),
     /// Contains the next base node for recoloring.
-    Recolor(NodeRef<T>),
+    Recolor(NodeRef<T, Color>),
 }
 
 /// An enumerable value representing the available colors of a node.
@@ -184,93 +105,19 @@ impl Color {
     }
 }
 
-/// Node represents an interior node to the Red-Black Tree, storing
-/// information about direct ancestor/descendent nodes as well as an inner
-/// value denoted by type V.
-#[derive(Debug, Clone)]
-struct Node<T> {
-    color: Color,
-    /// An inner value stored in the tree.
-    inner: T,
-    /// An optional parent node. A value of None signifies that this node is
-    /// the root.
-    parent: Option<NodeRef<T>>,
-    /// An optional left-side direcitonaldescendant node.
-    left: Option<NodeRef<T>>,
-    /// An optional right-side direcitonaldescendant node.
-    right: Option<NodeRef<T>>,
-}
-
-impl<T> Node<T>
-where
-    T: PartialEq,
-{
-    fn new(
-        color: Color,
-        inner: T,
-        parent: Option<NodeRef<T>>,
-        left: Option<NodeRef<T>>,
-        right: Option<NodeRef<T>>,
-    ) -> Self {
-        Self {
-            color,
-            inner,
-            parent,
-            left,
-            right,
-        }
-    }
-
-    fn parent(&self) -> Option<NodeRef<T>> {
-        self.parent
-    }
-
-    fn sibling(&self) -> Option<NodeRef<T>> {
-        let direction = self.direction()?;
-        let parent = self.parent?;
-
-        match direction {
-            Direction::Left => parent.as_ref().right,
-            Direction::Right => parent.as_ref().left,
-        }
-    }
-
-    fn grandparent(&self) -> Option<NodeRef<T>> {
-        self.parent.and_then(|parent| parent.as_ref().parent)
-    }
-
-    fn uncle(&self) -> Option<NodeRef<T>> {
-        self.parent.and_then(|parent| parent.as_ref().sibling())
-    }
-}
-
-impl<T> Directional for Node<T>
-where
-    T: PartialEq,
-{
-    fn direction(&self) -> Option<Direction> {
-        let optional_parent = self.parent?;
-
-        match optional_parent.as_ref().left {
-            Some(left_node) if left_node.as_ref().inner == self.inner => Some(Direction::Left),
-            _ => Some(Direction::Right),
-        }
-    }
-}
-
-impl<T> Colorable for Node<T> {
+impl<T> Colorable for Node<T, Color> {
     fn color(&self) -> Color {
-        self.color
+        self.attributes
     }
 }
 
-impl<T> ColorableMut for Node<T> {
+impl<T> ColorableMut for Node<T, Color> {
     fn set_color_mut(&mut self, color: Color) {
-        self.color = color;
+        self.attributes = color;
     }
 
     fn set_flip_mut(&mut self) {
-        let current_color = self.color;
+        let current_color = self.attributes;
         self.set_color_mut(current_color.flip());
     }
 }
@@ -280,10 +127,10 @@ impl<T> ColorableMut for Node<T> {
 enum SearchResult<T> {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
-    Hit(NodeRef<T>),
+    Hit(NodeRef<T, Color>),
     /// Miss represents the value was not found in the tree and represents the
     /// nearest parent node.
-    Miss(NodeRef<T>),
+    Miss(NodeRef<T, Color>),
     /// Empty represents an empty tree.
     Empty,
 }
@@ -293,7 +140,7 @@ impl<T> SearchResult<T> {
     /// `f` wrapped in `Some` otherwise `None` is returned.
     fn hit_then<F, B>(self, f: F) -> Option<B>
     where
-        F: Fn(NodeRef<T>) -> B,
+        F: Fn(NodeRef<T, Color>) -> B,
     {
         match self {
             SearchResult::Hit(node) => Some(f(node)),
@@ -308,7 +155,7 @@ pub struct RedBlackTree<T>
 where
     T: PartialEq + PartialOrd,
 {
-    root: Option<NodeRef<T>>,
+    root: Option<NodeRef<T, Color>>,
 }
 
 impl<T> RedBlackTree<T>
@@ -317,7 +164,7 @@ where
 {
     /// Instantiates a new Red-Black tree from an initial value.
     pub fn new(root: T) -> Self {
-        let node = Node::new(Color::Black, root, None, None, None);
+        let node = Node::new(root, None, None, None, Color::Black);
         let root_ptr = NodeRef::from(node);
 
         Self {
@@ -379,12 +226,12 @@ where
         match nearest {
             SearchResult::Hit(_) => (),
             SearchResult::Empty => {
-                let node = Node::new(Color::Black, value, None, None, None);
+                let node = Node::new(value, None, None, None, Color::Black);
                 self.root = Some(NodeRef::from(node));
             }
             SearchResult::Miss(mut parent_node) => {
                 let is_left = value < parent_node.as_ref().inner;
-                let child = Node::new(Color::Red, value, Some(parent_node), None, None);
+                let child = Node::new(value, Some(parent_node), None, None, Color::Red);
                 let child_ptr = NodeRef::from(child);
                 if is_left {
                     parent_node.as_mut().left = Some(child_ptr);
@@ -524,7 +371,7 @@ where
         }
     }
 
-    unsafe fn find_in_order_successor(&self, node: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn find_in_order_successor(&self, node: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
         let optional_right_child = node.as_ref().right;
 
         optional_right_child.and_then(|child| self.find_min_from(child))
@@ -555,7 +402,7 @@ where
 
     unsafe fn needs_rebalance_after_insertion(
         &self,
-        base_node: NodeRef<T>,
+        base_node: NodeRef<T, Color>,
     ) -> Option<InsertRebalance<T>> {
         // short-circuit to none if the base is root.
         let base = base_node.as_ref();
@@ -591,9 +438,9 @@ where
     #[allow(unused_assignments)]
     unsafe fn rebalance_on_deletion_mut(
         &mut self,
-        mut x: Option<NodeRef<T>>,
+        mut x: Option<NodeRef<T, Color>>,
         x_direction: Direction,
-        mut optional_x_parent: Option<NodeRef<T>>,
+        mut optional_x_parent: Option<NodeRef<T, Color>>,
     ) {
         while optional_x_parent.is_some() && x.color() == Color::Black {
             let mut x_parent = optional_x_parent.unwrap();
@@ -667,7 +514,7 @@ where
                                 optional_w = x_parent.as_ref().left;
                             }
 
-                            w.set_color_mut(x_parent.as_ref().color);
+                            w.set_color_mut(x_parent.as_ref().color());
                             x_parent.set_color_mut(Color::Black);
                             if let Some(mut w_left_child) = w_left_child {
                                 w_left_child.set_color_mut(Color::Black);
@@ -688,7 +535,7 @@ where
     ///    z --->  x
     ///     \       \
     ///      y       y
-    unsafe fn rotate_left_mut(&mut self, x: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn rotate_left_mut(&mut self, x: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
         self.rotate_mut(x, Direction::Left)
     }
 
@@ -698,16 +545,16 @@ where
     ///    z --->   x
     ///   /        /
     ///  y        y
-    unsafe fn rotate_right_mut(&mut self, x: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn rotate_right_mut(&mut self, x: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
         self.rotate_mut(x, Direction::Right)
     }
 
     /// Rotates a node by a passed direction
     unsafe fn rotate_mut(
         &mut self,
-        mut x_node_ref: NodeRef<T>,
+        mut x_node_ref: NodeRef<T, Color>,
         direction: Direction,
-    ) -> Option<NodeRef<T>> {
+    ) -> Option<NodeRef<T, Color>> {
         // if z or x aren't set return None
         let mut z = match direction {
             Direction::Left => x_node_ref.as_mut().right.take(),
@@ -765,7 +612,7 @@ where
 
     unsafe fn recolor_on_insertion_mut(
         &mut self,
-        base_node_ref: NodeRef<T>,
+        base_node_ref: NodeRef<T, Color>,
     ) -> Option<InsertRebalance<T>> {
         let base_node = base_node_ref.as_ref();
 
@@ -789,7 +636,7 @@ where
         .map(InsertRebalance::Recolor)
     }
 
-    unsafe fn handle_ll_mut(&mut self, node: NodeRef<T>) {
+    unsafe fn handle_ll_mut(&mut self, node: NodeRef<T, Color>) {
         let mut parent = node.as_ref().parent.unwrap();
         let mut grandparent = node.as_ref().grandparent().unwrap();
 
@@ -798,12 +645,12 @@ where
 
         // flip the colors of the original grandparent and parent
         let grandparent_color = grandparent.color();
-        grandparent.as_mut().color = grandparent_color.flip();
+        grandparent.as_mut().set_color_mut(grandparent_color.flip());
         let parent_color = parent.color();
-        parent.as_mut().color = parent_color.flip();
+        parent.as_mut().set_color_mut(parent_color.flip());
     }
 
-    unsafe fn handle_lr_mut(&mut self, node: NodeRef<T>) {
+    unsafe fn handle_lr_mut(&mut self, node: NodeRef<T, Color>) {
         let parent = node.as_ref().parent.unwrap();
 
         // rotate parent left
@@ -816,7 +663,7 @@ where
         self.handle_ll_mut(new_child_node)
     }
 
-    unsafe fn handle_rr_mut(&mut self, node: NodeRef<T>) {
+    unsafe fn handle_rr_mut(&mut self, node: NodeRef<T, Color>) {
         let mut parent = node.as_ref().parent.unwrap();
         let mut grandparent = node.as_ref().grandparent().unwrap();
 
@@ -825,12 +672,12 @@ where
 
         // flip the colors of the original grandparent and parent
         let grandparent_color = grandparent.color();
-        grandparent.as_mut().color = grandparent_color.flip();
+        grandparent.as_mut().set_color_mut(grandparent_color.flip());
         let parent_color = parent.color();
-        parent.as_mut().color = parent_color.flip();
+        parent.as_mut().set_color_mut(parent_color.flip());
     }
 
-    unsafe fn handle_rl_mut(&mut self, node: NodeRef<T>) {
+    unsafe fn handle_rl_mut(&mut self, node: NodeRef<T, Color>) {
         let parent = node.as_ref().parent.unwrap();
         // rotate parent right
         self.rotate_right_mut(parent);
@@ -854,7 +701,7 @@ where
 
     /// Returns the node with the left-most value (smallest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn find_min_from(&self, base: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn find_min_from(&self, base: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
         let mut current = Some(base);
         let mut left_most_node = current;
         while let Some(id) = current {
@@ -876,7 +723,7 @@ where
 
     /// Returns the node with the right-most value (largest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn find_max_from(&self, base_node_id: NodeRef<T>) -> Option<NodeRef<T>> {
+    unsafe fn find_max_from(&self, base_node_id: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
         let mut current = Some(base_node_id);
         let mut right_most_node = current;
         while let Some(id) = current {
@@ -926,8 +773,8 @@ where
     T: PartialEq + PartialOrd + 'a,
 {
     inner: core::marker::PhantomData<&'a RedBlackTree<T>>,
-    left_most_node: Option<NodeRef<T>>,
-    stack: Vec<NodeRef<T>>,
+    left_most_node: Option<NodeRef<T, Color>>,
+    stack: Vec<NodeRef<T, Color>>,
 }
 
 impl<'a, T: 'a> IterInOrder<'a, T>
@@ -1018,22 +865,22 @@ mod tests {
 
         let child = unsafe {
             tree.find_nearest_node(&child_val)
-                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
         };
 
         let parent = unsafe {
             tree.find_nearest_node(&parent_val)
-                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
         };
 
         let uncle = unsafe {
             tree.find_nearest_node(&uncle_val)
-                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
         };
 
         let grandparent = unsafe {
             tree.find_nearest_node(&grandparent_val)
-                .hit_then(|node| (node.as_ref().color, node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
         };
 
         assert_eq!(Some((Color::Black, child_val)), child);
