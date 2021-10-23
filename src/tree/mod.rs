@@ -160,6 +160,11 @@ where
     fn uncle(&self) -> Option<NodeRef<T, A>> {
         self.parent.and_then(|parent| parent.as_ref().sibling())
     }
+
+    #[allow(dead_code)]
+    fn borrow_attributes_mut(&mut self) -> &mut A {
+        &mut self.attributes
+    }
 }
 
 impl<T, A> Directional for Node<T, A>
