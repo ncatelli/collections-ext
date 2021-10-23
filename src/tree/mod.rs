@@ -99,7 +99,7 @@ where
     }
 }
 
-/// Node represents an interior node to the Binary Tree, storing
+/// Node represents an interior node to the Tree, storing
 /// information about direct ancestor/descendent nodes as well as an inner
 /// value denoted by type V.
 #[derive(Debug, Clone)]
@@ -113,6 +113,7 @@ pub(crate) struct Node<T, A> {
     left: Option<NodeRef<T, A>>,
     /// An optional right-side direcitonaldescendant node.
     right: Option<NodeRef<T, A>>,
+    /// Additional attributes on the node.
     attributes: A,
 }
 impl<T, A> Node<T, A>
@@ -162,6 +163,8 @@ where
     }
 
     #[allow(dead_code)]
+    /// Provides a mutable borrow of the attribute field for applying changes
+    /// in place.
     fn borrow_attributes_mut(&mut self) -> &mut A {
         &mut self.attributes
     }
