@@ -1071,4 +1071,11 @@ mod tests {
         let expected: Vec<u16> = (0..511).chain(513..1024).collect();
         assert_eq!(expected, received);
     }
+
+    #[test]
+    fn should_find_node_by_predicate() {
+        let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+
+        assert!(tree.find(|x| x == &&513).is_some());
+    }
 }

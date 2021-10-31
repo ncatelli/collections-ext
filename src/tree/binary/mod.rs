@@ -106,6 +106,13 @@ where
         }
     }
 
+    pub fn find<P>(&self, predicate: P) -> Option<&T>
+    where
+        P: FnMut(&&T) -> bool,
+    {
+        self.traverse_in_order().find(predicate)
+    }
+
     /// Inserts a value `T` into the tree returning a the modified tree in
     /// place.
     pub fn insert(mut self, value: T) -> Self {
@@ -500,5 +507,12 @@ mod tests {
         // skip 511 and 512
         let expected: Vec<u16> = (0..511).chain(513..1024).collect();
         assert_eq!(expected, received);
+    }
+
+    #[test]
+    fn should_find_node_by_predicate() {
+        let tree = (0..1024).fold(BinaryTree::default(), |tree, x| tree.insert(x));
+
+        assert!(tree.find(|x| x == &&513).is_some());
     }
 }
