@@ -212,6 +212,13 @@ where
         }
     }
 
+    pub fn find<P>(&self, predicate: P) -> Option<&T>
+    where
+        P: FnMut(&&T) -> bool,
+    {
+        self.traverse_in_order().find(predicate)
+    }
+
     pub fn insert(mut self, value: T) -> Self {
         self.insert_mut(value);
         self
