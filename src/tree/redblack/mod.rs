@@ -212,6 +212,16 @@ where
         }
     }
 
+    /// Searches for a node in the tree that satisfies the given predicate.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+    /// assert!(tree.find(|x| x == &&513).is_some());
+    /// ```
     pub fn find<P>(&self, predicate: P) -> Option<&T>
     where
         P: FnMut(&&T) -> bool,
@@ -1070,12 +1080,5 @@ mod tests {
         // skip 511 and 512
         let expected: Vec<u16> = (0..511).chain(513..1024).collect();
         assert_eq!(expected, received);
-    }
-
-    #[test]
-    fn should_find_node_by_predicate() {
-        let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x));
-
-        assert!(tree.find(|x| x == &&513).is_some());
     }
 }
