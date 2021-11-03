@@ -45,14 +45,96 @@ impl<K, V> SearchResult<K, V> {
 
 /// An implementation of a Binary Tree
 #[derive(Debug)]
-pub struct BinaryTree<K, V>
+pub struct BinaryTree<T>
+where
+    T: PartialEq + PartialOrd,
+{
+    inner: KeyedBinaryTree<T, ()>,
+}
+
+impl<T> BinaryTree<T>
+where
+    T: PartialEq + PartialOrd,
+{
+    pub fn new(root: T) -> Self {
+        Self {
+            inner: KeyedBinaryTree::new(root, ()),
+        }
+    }
+}
+
+impl<T> BinaryTree<T>
+where
+    T: PartialEq + PartialOrd,
+{
+    /// Returns a boolean representing if the tree is empty or not.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Inserts a value `T` into the tree returning a the modified tree in
+    /// place.
+    pub fn insert(mut self, value: T) -> Self {
+        self.insert_mut(value);
+        self
+    }
+
+    /// Inserts a value `T` into the tree. If the value already exists in the
+    /// tree, nothing is done.
+    pub fn insert_mut(&mut self, value: T) {
+        unsafe { self.inner.insert_mut_unchecked(value, ()) }
+    }
+
+    /// Remove a node, `T`, from the tree, returning the modifed tree.
+    pub fn remove(mut self, value: &T) -> Self {
+        self.remove_mut(value);
+        self
+    }
+
+    /// Remove a value, `T`, from the tree in place.
+    pub fn remove_mut(&mut self, value: &T) -> bool {
+        unsafe { self.inner.remove_mut_unchecked(value) }.is_some()
+    }
+
+    /// Returns the node with the left-most value (smallest) or `None` if the
+    /// tree is empty.
+    pub fn min(&self) -> Option<&T> {
+        self.inner.min().map(|(value, _)| value)
+    }
+
+    /// Returns the node with the right-most value (largest) or `None` if the
+    /// tree is empty.
+    pub fn max(&self) -> Option<&T> {
+        self.inner.min().map(|(value, _)| value)
+    }
+
+    /// Returns an Iterator for traversing an array in order.
+    pub fn traverse_in_order(&self) -> IterKeysInOrder<'_, T> {
+        IterKeysInOrder::new(&self.inner)
+    }
+}
+
+impl<T> Default for BinaryTree<T>
+where
+    T: PartialEq + PartialOrd,
+{
+    fn default() -> Self {
+        Self {
+            inner: KeyedBinaryTree::default(),
+        }
+    }
+}
+
+/// An implementation of a Binary Tree
+#[derive(Debug)]
+pub struct KeyedBinaryTree<K, V>
 where
     K: PartialEq + PartialOrd,
 {
     root: Option<NodeRef<K, V, ()>>,
 }
 
-impl<K, V> BinaryTree<K, V>
+impl<K, V> KeyedBinaryTree<K, V>
 where
     K: PartialEq + PartialOrd,
 {
@@ -68,7 +150,7 @@ where
 }
 
 // helper methods
-impl<K, V> BinaryTree<K, V>
+impl<K, V> KeyedBinaryTree<K, V>
 where
     K: PartialEq + PartialOrd,
 {
@@ -113,9 +195,9 @@ where
     /// # Example
     ///
     /// ```
-    /// use collections_ext::tree::binary::BinaryTree;
+    /// use collections_ext::tree::binary::KeyedBinaryTree;
     ///
-    /// let tree = (0..1024).fold(BinaryTree::default(), |tree, x| tree.insert(x, ()));
+    /// let tree = (0..1024).fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()));
     /// assert!(tree.find(|x| x == &&513).is_some());
     /// ```
     pub fn find<P>(&self, mut predicate: P) -> Option<&V>
@@ -350,7 +432,7 @@ where
     }
 }
 
-impl<K, V> Drop for BinaryTree<K, V>
+impl<K, V> Drop for KeyedBinaryTree<K, V>
 where
     K: PartialOrd + PartialEq,
 {
@@ -373,7 +455,7 @@ where
     }
 }
 
-impl<K, V> Default for BinaryTree<K, V>
+impl<K, V> Default for KeyedBinaryTree<K, V>
 where
     K: PartialEq + PartialOrd,
 {
@@ -386,7 +468,7 @@ pub struct IterInOrder<'a, K, V>
 where
     K: PartialEq + PartialOrd + 'a,
 {
-    inner: core::marker::PhantomData<&'a BinaryTree<K, V>>,
+    inner: core::marker::PhantomData<&'a KeyedBinaryTree<K, V>>,
     left_most_node: Option<NodeRef<K, V, ()>>,
     stack: Vec<NodeRef<K, V, ()>>,
 }
@@ -395,7 +477,7 @@ impl<'a, K: 'a, V: 'a> IterInOrder<'a, K, V>
 where
     K: PartialEq + PartialOrd + 'a,
 {
-    pub fn new(inner: &'a BinaryTree<K, V>) -> Self {
+    pub fn new(inner: &'a KeyedBinaryTree<K, V>) -> Self {
         Self {
             inner: core::marker::PhantomData,
             left_most_node: inner.root,
@@ -427,6 +509,35 @@ where
     }
 }
 
+pub struct IterKeysInOrder<'a, T>
+where
+    T: PartialEq + PartialOrd + 'a,
+{
+    inner: IterInOrder<'a, T, ()>,
+}
+
+impl<'a, T: 'a> IterKeysInOrder<'a, T>
+where
+    T: PartialEq + PartialOrd + 'a,
+{
+    pub fn new(inner: &'a KeyedBinaryTree<T, ()>) -> Self {
+        Self {
+            inner: IterInOrder::new(inner),
+        }
+    }
+}
+
+impl<'a, T: 'a> Iterator for IterKeysInOrder<'a, T>
+where
+    T: PartialEq + PartialOrd + 'a,
+{
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|(value, _)| value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,7 +547,7 @@ mod tests {
 
     #[test]
     fn should_return_correct_empty_state_when_tree_has_values() {
-        let tree = BinaryTree::<usize, ()>::default();
+        let tree = KeyedBinaryTree::<usize, ()>::default();
 
         assert!(tree.is_empty());
         assert!(!tree.insert(5, ()).is_empty());
@@ -446,12 +557,12 @@ mod tests {
     fn should_yield_correct_min_and_max_for_a_given_tree() {
         let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()));
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()));
 
         assert_eq!(Some((&25, &())), tree.max());
         assert_eq!(Some((&5, &())), tree.min());
 
-        let empty_tree = BinaryTree::<usize, ()>::default();
+        let empty_tree = KeyedBinaryTree::<usize, ()>::default();
 
         assert_eq!(None, empty_tree.max());
         assert_eq!(None, empty_tree.min());
@@ -461,7 +572,7 @@ mod tests {
     fn should_traverse_in_order() {
         let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()));
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()));
 
         let mut i = tree.traverse_in_order();
 
@@ -474,7 +585,7 @@ mod tests {
 
         let tree = (0..1024)
             .rev()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()));
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()));
 
         let received: Vec<u16> = tree.traverse_in_order().map(|(k, _)| k).copied().collect();
         let expected: Vec<u16> = (0..1024).collect();
@@ -487,7 +598,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()))
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&1);
 
         let left_child_of_root = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) };
@@ -501,7 +612,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()))
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&10);
 
         let root = unsafe { tree.find_nearest_node(&15).hit_then(|node| node) };
@@ -523,7 +634,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()))
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&5);
 
         let root = unsafe { tree.find_nearest_node(&10).hit_then(|node| node) };
@@ -539,7 +650,7 @@ mod tests {
     fn should_retain_order_after_deletion() {
         let tree = (0..1024)
             .rev()
-            .fold(BinaryTree::default(), |tree, x| tree.insert(x, ()))
+            .fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&511)
             .remove(&512);
 
