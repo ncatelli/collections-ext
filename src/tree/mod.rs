@@ -24,48 +24,53 @@ enum Direction {
 }
 
 /// NodeRef represents a Non-Null pointer to a Node.
-#[derive(PartialEq)]
-pub(crate) struct NodeRef<T, A>(NonNull<Node<T, A>>);
+pub(crate) struct NodeRef<K, V, A>(NonNull<Node<K, V, A>>);
 
-impl<T, A> NodeRef<T, A> {
+impl<K, V, A> NodeRef<K, V, A> {
     /// Consumes the enclosing NodeRef, returning the wrapped raw pointer.
-    fn as_ptr(self) -> *mut Node<T, A> {
+    fn as_ptr(self) -> *mut Node<K, V, A> {
         self.0.as_ptr()
     }
 }
 
-impl<T, A> From<NonNull<Node<T, A>>> for NodeRef<T, A> {
-    fn from(ptr: NonNull<Node<T, A>>) -> Self {
+impl<K, V, A> From<NonNull<Node<K, V, A>>> for NodeRef<K, V, A> {
+    fn from(ptr: NonNull<Node<K, V, A>>) -> Self {
         Self(ptr)
     }
 }
 
-impl<T, A> From<Node<T, A>> for NodeRef<T, A> {
-    fn from(node: Node<T, A>) -> Self {
+impl<K, V, A> From<Node<K, V, A>> for NodeRef<K, V, A> {
+    fn from(node: Node<K, V, A>) -> Self {
         let boxed_node = Box::new(node);
         Self::from(boxed_node)
     }
 }
 
-impl<T, A> From<Box<Node<T, A>>> for NodeRef<T, A> {
-    fn from(node: Box<Node<T, A>>) -> Self {
+impl<K, V, A> From<Box<Node<K, V, A>>> for NodeRef<K, V, A> {
+    fn from(node: Box<Node<K, V, A>>) -> Self {
         NonNull::new(Box::into_raw(node))
             .map(NodeRef::from)
             .expect("Box points to an invalid memory location")
     }
 }
 
-impl<T, A> Clone for NodeRef<T, A> {
+impl<K, V, A> Clone for NodeRef<K, V, A> {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
-impl<T, A> Copy for NodeRef<T, A> {}
+impl<K, V, A> Copy for NodeRef<K, V, A> {}
 
-impl<T, A> Directional for NodeRef<T, A>
+impl<K, V, A> PartialEq for NodeRef<K, V, A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<K, V, A> Directional for NodeRef<K, V, A>
 where
-    Node<T, A>: Directional,
+    Node<K, V, A>: Directional,
 {
     fn direction(&self) -> Option<Direction> {
         unsafe {
@@ -75,26 +80,28 @@ where
     }
 }
 
-impl<T, A> core::convert::AsRef<Node<T, A>> for NodeRef<T, A> {
-    fn as_ref(&self) -> &Node<T, A> {
+impl<K, V, A> core::convert::AsRef<Node<K, V, A>> for NodeRef<K, V, A> {
+    fn as_ref(&self) -> &Node<K, V, A> {
         unsafe { self.0.as_ref() }
     }
 }
 
-impl<T, A> core::convert::AsMut<Node<T, A>> for NodeRef<T, A> {
-    fn as_mut(&mut self) -> &mut Node<T, A> {
+impl<K, V, A> core::convert::AsMut<Node<K, V, A>> for NodeRef<K, V, A> {
+    fn as_mut(&mut self) -> &mut Node<K, V, A> {
         unsafe { self.0.as_mut() }
     }
 }
 
-impl<T, A> core::fmt::Debug for NodeRef<T, A>
+impl<K, V, A> core::fmt::Debug for NodeRef<K, V, A>
 where
-    T: core::fmt::Debug,
+    K: core::fmt::Debug,
+    V: core::fmt::Debug,
     A: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("NodeRef")
-            .field(unsafe { &self.0.as_ref().inner })
+            .field(unsafe { &self.0.as_ref().key })
+            .field(unsafe { &self.0.as_ref().value })
             .finish()
     }
 }
@@ -103,32 +110,35 @@ where
 /// information about direct ancestor/descendent nodes as well as an inner
 /// value denoted by type V.
 #[derive(Debug, Clone)]
-pub(crate) struct Node<T, A> {
+pub(crate) struct Node<K, V, A> {
+    key: K,
     /// An inner value stored in the tree.
-    inner: T,
+    value: V,
     /// An optional parent node. A value of None signifies that this node is
     /// the root.
-    parent: Option<NodeRef<T, A>>,
+    parent: Option<NodeRef<K, V, A>>,
     /// An optional left-side direcitonaldescendant node.
-    left: Option<NodeRef<T, A>>,
+    left: Option<NodeRef<K, V, A>>,
     /// An optional right-side direcitonaldescendant node.
-    right: Option<NodeRef<T, A>>,
+    right: Option<NodeRef<K, V, A>>,
     /// Additional attributes on the node.
     attributes: A,
 }
-impl<T, A> Node<T, A>
+impl<K, V, A> Node<K, V, A>
 where
-    T: PartialEq,
+    K: PartialEq,
 {
     pub(crate) fn new(
-        inner: T,
-        parent: Option<NodeRef<T, A>>,
-        left: Option<NodeRef<T, A>>,
-        right: Option<NodeRef<T, A>>,
+        key: K,
+        value: V,
+        parent: Option<NodeRef<K, V, A>>,
+        left: Option<NodeRef<K, V, A>>,
+        right: Option<NodeRef<K, V, A>>,
         attributes: A,
     ) -> Self {
         Self {
-            inner,
+            key,
+            value,
             parent,
             left,
             right,
@@ -137,12 +147,12 @@ where
     }
 
     #[allow(dead_code)]
-    pub(crate) fn parent(&self) -> Option<NodeRef<T, A>> {
+    pub(crate) fn parent(&self) -> Option<NodeRef<K, V, A>> {
         self.parent
     }
 
     #[allow(dead_code)]
-    fn sibling(&self) -> Option<NodeRef<T, A>> {
+    fn sibling(&self) -> Option<NodeRef<K, V, A>> {
         let direction = self.direction()?;
         let parent = self.parent?;
 
@@ -153,12 +163,12 @@ where
     }
 
     #[allow(dead_code)]
-    fn grandparent(&self) -> Option<NodeRef<T, A>> {
+    fn grandparent(&self) -> Option<NodeRef<K, V, A>> {
         self.parent.and_then(|parent| parent.as_ref().parent)
     }
 
     #[allow(dead_code)]
-    fn uncle(&self) -> Option<NodeRef<T, A>> {
+    fn uncle(&self) -> Option<NodeRef<K, V, A>> {
         self.parent.and_then(|parent| parent.as_ref().sibling())
     }
 
@@ -170,15 +180,15 @@ where
     }
 }
 
-impl<T, A> Directional for Node<T, A>
+impl<K, V, A> Directional for Node<K, V, A>
 where
-    T: PartialEq,
+    K: PartialEq,
 {
     fn direction(&self) -> Option<Direction> {
         let optional_parent = self.parent?;
 
         match optional_parent.as_ref().left {
-            Some(left_node) if left_node.as_ref().inner == self.inner => Some(Direction::Left),
+            Some(left_node) if left_node.as_ref().key == self.key => Some(Direction::Left),
             _ => Some(Direction::Right),
         }
     }

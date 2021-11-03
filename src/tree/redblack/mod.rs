@@ -20,14 +20,14 @@ trait ColorableMut: Colorable {
     fn set_flip_mut(&mut self);
 }
 
-impl<T> Colorable for NodeRef<T, Color> {
+impl<K, V> Colorable for NodeRef<K, V, Color> {
     fn color(&self) -> Color {
         let node = unsafe { self.0.as_ref() };
         node.attributes
     }
 }
 
-impl<T> ColorableMut for NodeRef<T, Color> {
+impl<K, V> ColorableMut for NodeRef<K, V, Color> {
     fn set_color_mut(&mut self, color: Color) {
         let mut node = unsafe { self.0.as_mut() };
         node.attributes = color;
@@ -40,7 +40,7 @@ impl<T> ColorableMut for NodeRef<T, Color> {
     }
 }
 
-impl<T> Colorable for Option<NodeRef<T, Color>> {
+impl<K, V> Colorable for Option<NodeRef<K, V, Color>> {
     fn color(&self) -> Color {
         match self {
             Some(noderef) => noderef.color(),
@@ -49,7 +49,7 @@ impl<T> Colorable for Option<NodeRef<T, Color>> {
     }
 }
 
-impl<T> ColorableMut for Option<NodeRef<T, Color>> {
+impl<K, V> ColorableMut for Option<NodeRef<K, V, Color>> {
     fn set_color_mut(&mut self, color: Color) {
         if let Some(ref mut noderef) = self {
             noderef.set_color_mut(color)
@@ -65,28 +65,28 @@ impl<T> ColorableMut for Option<NodeRef<T, Color>> {
 
 /// Represents the three possible situations that a node can encounter on a delete,
 #[derive(Clone, Copy, PartialEq)]
-enum DeleteSuccessor<T> {
+enum DeleteSuccessor<K, V> {
     /// Node has two children. Return the in-order successor.
-    Double(Option<NodeRef<T, Color>>),
+    Double(Option<NodeRef<K, V, Color>>),
     /// Node has a single child.
-    Single(NodeRef<T, Color>),
+    Single(NodeRef<K, V, Color>),
     /// Node has no children (is a leaf or root).
     /// Can be deleted directly.
     None,
 }
 
 /// InsertRebalance captures the states of an insertion rebalance operation.
-enum InsertRebalance<T> {
+enum InsertRebalance<K, V> {
     /// Represents a LeftLeft case of inbalance.
-    LeftLeft(NodeRef<T, Color>),
+    LeftLeft(NodeRef<K, V, Color>),
     /// Represents a LeftRight case of inbalance.
-    LeftRight(NodeRef<T, Color>),
+    LeftRight(NodeRef<K, V, Color>),
     /// Represents a RightRight case of inbalance.
-    RightRight(NodeRef<T, Color>),
+    RightRight(NodeRef<K, V, Color>),
     /// Represents a RightLeft case of inbalance.
-    RightLeft(NodeRef<T, Color>),
+    RightLeft(NodeRef<K, V, Color>),
     /// Contains the next base node for recoloring.
-    Recolor(NodeRef<T, Color>),
+    Recolor(NodeRef<K, V, Color>),
 }
 
 /// An enumerable value representing the available colors of a node.
@@ -105,13 +105,13 @@ impl Color {
     }
 }
 
-impl<T> Colorable for Node<T, Color> {
+impl<K, V> Colorable for Node<K, V, Color> {
     fn color(&self) -> Color {
         self.attributes
     }
 }
 
-impl<T> ColorableMut for Node<T, Color> {
+impl<K, V> ColorableMut for Node<K, V, Color> {
     fn set_color_mut(&mut self, color: Color) {
         self.attributes = color;
     }
@@ -124,23 +124,23 @@ impl<T> ColorableMut for Node<T, Color> {
 
 /// SearchResult represents the results of a binary tree search.
 #[derive(Debug)]
-enum SearchResult<T> {
+enum SearchResult<K, V> {
     /// Hit signifies the exact value was found in the tree and
     /// contains a reference to the NodeId for said value.
-    Hit(NodeRef<T, Color>),
+    Hit(NodeRef<K, V, Color>),
     /// Miss represents the value was not found in the tree and represents the
     /// nearest parent node.
-    Miss(NodeRef<T, Color>),
+    Miss(NodeRef<K, V, Color>),
     /// Empty represents an empty tree.
     Empty,
 }
 
-impl<T> SearchResult<T> {
+impl<K, V> SearchResult<K, V> {
     /// Calls `f` if the self is `SearchResult::Hit` returning the result of
     /// `f` wrapped in `Some` otherwise `None` is returned.
     fn hit_then<F, B>(self, f: F) -> Option<B>
     where
-        F: Fn(NodeRef<T, Color>) -> B,
+        F: Fn(NodeRef<K, V, Color>) -> B,
     {
         match self {
             SearchResult::Hit(node) => Some(f(node)),
@@ -151,20 +151,20 @@ impl<T> SearchResult<T> {
 
 /// An implementation of a Red-Black Tree
 #[derive(Debug)]
-pub struct RedBlackTree<T>
+pub struct RedBlackTree<K, V>
 where
-    T: PartialEq + PartialOrd,
+    K: PartialEq + PartialOrd,
 {
-    root: Option<NodeRef<T, Color>>,
+    root: Option<NodeRef<K, V, Color>>,
 }
 
-impl<T> RedBlackTree<T>
+impl<K, V> RedBlackTree<K, V>
 where
-    T: PartialEq + PartialOrd,
+    K: PartialEq + PartialOrd,
 {
     /// Instantiates a new Red-Black tree from an initial value.
-    pub fn new(root: T) -> Self {
-        let node = Node::new(root, None, None, None, Color::Black);
+    pub fn new(key: K, value: V) -> Self {
+        let node = Node::new(key, value, None, None, None, Color::Black);
         let root_ptr = NodeRef::from(node);
 
         Self {
@@ -174,9 +174,9 @@ where
 }
 
 // helper methods
-impl<T> RedBlackTree<T>
+impl<K, V> RedBlackTree<K, V>
 where
-    T: PartialEq + PartialOrd,
+    K: PartialEq + PartialOrd,
 {
     /// Returns a boolean representing if the tree is empty or not.
     pub fn is_empty(&self) -> bool {
@@ -185,22 +185,24 @@ where
 
     /// Searches for a value in the tree returning a SearchResult that
     /// captures if the search yield a hit, miss or empty tree.  
-    unsafe fn find_nearest_node(&self, value: &T) -> SearchResult<T> {
+    unsafe fn find_nearest_node(&self, key: &K) -> SearchResult<K, V> {
         if let Some(root) = self.root {
             let mut next_step = root;
             loop {
-                if value == &next_step.as_ref().inner {
+                let next_step_node = next_step.as_ref();
+
+                if key == &next_step_node.key {
                     return SearchResult::Hit(next_step);
-                } else if value <= &next_step.as_ref().inner {
+                } else if key <= &next_step_node.key {
                     // if left leaf exists follow that direction.
-                    match &next_step.as_ref().left {
+                    match &next_step_node.left {
                         Some(left) => next_step = *left,
                         // return the parent
                         None => return SearchResult::Miss(next_step),
                     }
                 } else {
                     // if right leaf exists follow that direction.
-                    match &next_step.as_ref().right {
+                    match &next_step_node.right {
                         Some(right) => next_step = *right,
                         // return the parent
                         None => return SearchResult::Miss(next_step),
@@ -219,36 +221,38 @@ where
     /// ```
     /// use collections_ext::tree::redblack::RedBlackTree;
     ///
-    /// let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+    /// let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
     /// assert!(tree.find(|x| x == &&513).is_some());
     /// ```
-    pub fn find<P>(&self, predicate: P) -> Option<&T>
+    pub fn find<P>(&self, mut predicate: P) -> Option<&V>
     where
-        P: FnMut(&&T) -> bool,
+        P: FnMut(&&K) -> bool,
     {
-        self.traverse_in_order().find(predicate)
+        self.traverse_in_order()
+            .find(|(k, _)| predicate(k))
+            .map(|(_, v)| v)
     }
 
-    pub fn insert(mut self, value: T) -> Self {
-        self.insert_mut(value);
+    pub fn insert(mut self, key: K, value: V) -> Self {
+        self.insert_mut(key, value);
         self
     }
 
-    pub fn insert_mut(&mut self, value: T) {
-        unsafe { self.insert_mut_unchecked(value) }
+    pub fn insert_mut(&mut self, key: K, value: V) {
+        unsafe { self.insert_mut_unchecked(key, value) }
     }
 
-    unsafe fn insert_mut_unchecked(&mut self, value: T) {
-        let nearest = self.find_nearest_node(&value);
+    unsafe fn insert_mut_unchecked(&mut self, key: K, value: V) {
+        let nearest = self.find_nearest_node(&key);
         match nearest {
             SearchResult::Hit(_) => (),
             SearchResult::Empty => {
-                let node = Node::new(value, None, None, None, Color::Black);
+                let node = Node::new(key, value, None, None, None, Color::Black);
                 self.root = Some(NodeRef::from(node));
             }
             SearchResult::Miss(mut parent_node) => {
-                let is_left = value < parent_node.as_ref().inner;
-                let child = Node::new(value, Some(parent_node), None, None, Color::Red);
+                let is_left = key < parent_node.as_ref().key;
+                let child = Node::new(key, value, Some(parent_node), None, None, Color::Red);
                 let child_ptr = NodeRef::from(child);
                 if is_left {
                     parent_node.as_mut().left = Some(child_ptr);
@@ -263,17 +267,17 @@ where
         };
     }
 
-    pub fn remove(mut self, value: &T) -> Self {
-        self.remove_mut(value);
+    pub fn remove(mut self, key: &K) -> Self {
+        self.remove_mut(key);
         self
     }
 
-    pub fn remove_mut(&mut self, value: &T) -> Option<T> {
-        unsafe { self.remove_mut_unchecked(value) }
+    pub fn remove_mut(&mut self, key: &K) -> Option<V> {
+        unsafe { self.remove_mut_unchecked(key) }
     }
 
-    unsafe fn remove_mut_unchecked(&mut self, value: &T) -> Option<T> {
-        let node_to_be_deleted = self.find_nearest_node(value).hit_then(|node| node)?;
+    unsafe fn remove_mut_unchecked(&mut self, key: &K) -> Option<V> {
+        let node_to_be_deleted = self.find_nearest_node(key).hit_then(|node| node)?;
         let optional_node_direction = node_to_be_deleted.as_ref().direction();
         let original_color = node_to_be_deleted.color();
         let optional_parent = node_to_be_deleted.as_ref().parent;
@@ -310,7 +314,7 @@ where
                 x.as_mut().parent = boxed_node_to_be_deleted.parent;
 
                 // Take ownership of the inner value
-                let inner = boxed_node_to_be_deleted.inner;
+                let inner = boxed_node_to_be_deleted.value;
                 Some(inner)
             }
             // can be directly deleted
@@ -330,7 +334,7 @@ where
                 }
 
                 // Take ownership of the inner value
-                let inner = boxed_node_to_be_deleted.inner;
+                let inner = boxed_node_to_be_deleted.value;
                 Some(inner)
             }
             DeleteSuccessor::Double(in_order_successor) => {
@@ -383,18 +387,22 @@ where
                     self.rebalance_on_deletion_mut(x, x_direction, Some(x_parent));
                 }
 
-                Some(boxed_node_to_be_deleted.inner)
+                let inner = boxed_node_to_be_deleted.value;
+                Some(inner)
             }
         }
     }
 
-    unsafe fn find_in_order_successor(&self, node: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
+    unsafe fn find_in_order_successor(
+        &self,
+        node: NodeRef<K, V, Color>,
+    ) -> Option<NodeRef<K, V, Color>> {
         let optional_right_child = node.as_ref().right;
 
         optional_right_child.and_then(|child| self.find_min_from(child))
     }
 
-    unsafe fn rebalance_on_insertion_mut(&mut self, rebalance_operation: InsertRebalance<T>) {
+    unsafe fn rebalance_on_insertion_mut(&mut self, rebalance_operation: InsertRebalance<K, V>) {
         let mut next_step = Some(rebalance_operation);
 
         while let Some(step) = next_step {
@@ -419,8 +427,8 @@ where
 
     unsafe fn needs_rebalance_after_insertion(
         &self,
-        base_node: NodeRef<T, Color>,
-    ) -> Option<InsertRebalance<T>> {
+        base_node: NodeRef<K, V, Color>,
+    ) -> Option<InsertRebalance<K, V>> {
         // short-circuit to none if the base is root.
         let base = base_node.as_ref();
         let base_node_direction = base.direction()?;
@@ -455,9 +463,9 @@ where
     #[allow(unused_assignments)]
     unsafe fn rebalance_on_deletion_mut(
         &mut self,
-        mut x: Option<NodeRef<T, Color>>,
+        mut x: Option<NodeRef<K, V, Color>>,
         x_direction: Direction,
-        mut optional_x_parent: Option<NodeRef<T, Color>>,
+        mut optional_x_parent: Option<NodeRef<K, V, Color>>,
     ) {
         while optional_x_parent.is_some() && x.color() == Color::Black {
             let mut x_parent = optional_x_parent.unwrap();
@@ -552,7 +560,7 @@ where
     ///    z --->  x
     ///     \       \
     ///      y       y
-    unsafe fn rotate_left_mut(&mut self, x: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
+    unsafe fn rotate_left_mut(&mut self, x: NodeRef<K, V, Color>) -> Option<NodeRef<K, V, Color>> {
         self.rotate_mut(x, Direction::Left)
     }
 
@@ -562,16 +570,16 @@ where
     ///    z --->   x
     ///   /        /
     ///  y        y
-    unsafe fn rotate_right_mut(&mut self, x: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
+    unsafe fn rotate_right_mut(&mut self, x: NodeRef<K, V, Color>) -> Option<NodeRef<K, V, Color>> {
         self.rotate_mut(x, Direction::Right)
     }
 
     /// Rotates a node by a passed direction
     unsafe fn rotate_mut(
         &mut self,
-        mut x_node_ref: NodeRef<T, Color>,
+        mut x_node_ref: NodeRef<K, V, Color>,
         direction: Direction,
-    ) -> Option<NodeRef<T, Color>> {
+    ) -> Option<NodeRef<K, V, Color>> {
         // if z or x aren't set return None
         let mut z = match direction {
             Direction::Left => x_node_ref.as_mut().right.take(),
@@ -629,8 +637,8 @@ where
 
     unsafe fn recolor_on_insertion_mut(
         &mut self,
-        base_node_ref: NodeRef<T, Color>,
-    ) -> Option<InsertRebalance<T>> {
+        base_node_ref: NodeRef<K, V, Color>,
+    ) -> Option<InsertRebalance<K, V>> {
         let base_node = base_node_ref.as_ref();
 
         // set parent to black and return the id
@@ -653,7 +661,7 @@ where
         .map(InsertRebalance::Recolor)
     }
 
-    unsafe fn handle_ll_mut(&mut self, node: NodeRef<T, Color>) {
+    unsafe fn handle_ll_mut(&mut self, node: NodeRef<K, V, Color>) {
         let mut parent = node.as_ref().parent.unwrap();
         let mut grandparent = node.as_ref().grandparent().unwrap();
 
@@ -667,7 +675,7 @@ where
         parent.as_mut().set_color_mut(parent_color.flip());
     }
 
-    unsafe fn handle_lr_mut(&mut self, node: NodeRef<T, Color>) {
+    unsafe fn handle_lr_mut(&mut self, node: NodeRef<K, V, Color>) {
         let parent = node.as_ref().parent.unwrap();
 
         // rotate parent left
@@ -680,7 +688,7 @@ where
         self.handle_ll_mut(new_child_node)
     }
 
-    unsafe fn handle_rr_mut(&mut self, node: NodeRef<T, Color>) {
+    unsafe fn handle_rr_mut(&mut self, node: NodeRef<K, V, Color>) {
         let mut parent = node.as_ref().parent.unwrap();
         let mut grandparent = node.as_ref().grandparent().unwrap();
 
@@ -694,7 +702,7 @@ where
         parent.as_mut().set_color_mut(parent_color.flip());
     }
 
-    unsafe fn handle_rl_mut(&mut self, node: NodeRef<T, Color>) {
+    unsafe fn handle_rl_mut(&mut self, node: NodeRef<K, V, Color>) {
         let parent = node.as_ref().parent.unwrap();
         // rotate parent right
         self.rotate_right_mut(parent);
@@ -708,17 +716,18 @@ where
 
     /// Returns the node with the left-most value (smallest) or `None` if the
     /// tree is empty.
-    pub fn min(&self) -> Option<&T> {
+    pub fn min(&self) -> Option<(&K, &V)> {
         unsafe {
             self.root
                 .and_then(|base_node| self.find_min_from(base_node))
-                .map(|node| &(*node.as_ptr()).inner)
+                .map(|node_ref| node_ref.as_ptr())
+                .map(|node| (&(*node).key, &(*node).value))
         }
     }
 
     /// Returns the node with the left-most value (smallest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn find_min_from(&self, base: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
+    unsafe fn find_min_from(&self, base: NodeRef<K, V, Color>) -> Option<NodeRef<K, V, Color>> {
         let mut current = Some(base);
         let mut left_most_node = current;
         while let Some(id) = current {
@@ -730,17 +739,21 @@ where
 
     /// Returns the node with the right-most value (largest) or `None` if the
     /// tree is empty.
-    pub fn max(&self) -> Option<&T> {
+    pub fn max(&self) -> Option<(&K, &V)> {
         unsafe {
             self.root
                 .and_then(|base_node| self.find_max_from(base_node))
-                .map(|node| &(*node.as_ptr()).inner)
+                .map(|node_ref| node_ref.as_ptr())
+                .map(|node| (&(*node).key, &(*node).value))
         }
     }
 
     /// Returns the node with the right-most value (largest) or `None`, if
     /// empty, starting from a given base node.
-    unsafe fn find_max_from(&self, base_node_id: NodeRef<T, Color>) -> Option<NodeRef<T, Color>> {
+    unsafe fn find_max_from(
+        &self,
+        base_node_id: NodeRef<K, V, Color>,
+    ) -> Option<NodeRef<K, V, Color>> {
         let mut current = Some(base_node_id);
         let mut right_most_node = current;
         while let Some(id) = current {
@@ -751,54 +764,57 @@ where
     }
 
     /// Returns an Iterator for traversing an array in order.
-    pub fn traverse_in_order(&self) -> IterInOrder<'_, T> {
+    pub fn traverse_in_order(&self) -> IterInOrder<'_, K, V> {
         IterInOrder::new(self)
     }
 }
 
-impl<T> Drop for RedBlackTree<T>
+impl<K, V> Drop for RedBlackTree<K, V>
 where
-    T: PartialOrd + PartialEq,
+    K: PartialOrd + PartialEq,
 {
     fn drop(&mut self) {
-        unsafe {
-            let mut next = self.min();
-            while let Some(value) = next {
-                let node = self.find_nearest_node(value).hit_then(|node| node).unwrap();
-                let inner_val = &node.as_ptr().as_ref().unwrap().inner;
-                self.remove_mut(inner_val);
+        let mut next = self.min();
+        while let Some((next_key, _)) = next {
+            unsafe {
+                let node = self
+                    .find_nearest_node(next_key)
+                    .hit_then(|node| node)
+                    .unwrap();
+                let match_key = &node.as_ptr().as_ref().unwrap().key;
+                self.remove_mut(match_key);
 
                 next = self.min();
             }
-
-            self.root = None;
         }
+
+        self.root = None;
     }
 }
 
-impl<T> Default for RedBlackTree<T>
+impl<K, V> Default for RedBlackTree<K, V>
 where
-    T: PartialEq + PartialOrd,
+    K: PartialEq + PartialOrd,
 {
     fn default() -> Self {
         Self { root: None }
     }
 }
 
-pub struct IterInOrder<'a, T>
+pub struct IterInOrder<'a, K, V>
 where
-    T: PartialEq + PartialOrd + 'a,
+    K: PartialEq + PartialOrd + 'a,
 {
-    inner: core::marker::PhantomData<&'a RedBlackTree<T>>,
-    left_most_node: Option<NodeRef<T, Color>>,
-    stack: Vec<NodeRef<T, Color>>,
+    inner: core::marker::PhantomData<&'a RedBlackTree<K, V>>,
+    left_most_node: Option<NodeRef<K, V, Color>>,
+    stack: Vec<NodeRef<K, V, Color>>,
 }
 
-impl<'a, T: 'a> IterInOrder<'a, T>
+impl<'a, K, V: 'a> IterInOrder<'a, K, V>
 where
-    T: PartialEq + PartialOrd + 'a,
+    K: PartialEq + PartialOrd + 'a,
 {
-    pub fn new(inner: &'a RedBlackTree<T>) -> Self {
+    pub fn new(inner: &'a RedBlackTree<K, V>) -> Self {
         Self {
             inner: core::marker::PhantomData,
             left_most_node: inner.root,
@@ -807,11 +823,11 @@ where
     }
 }
 
-impl<'a, V: 'a> Iterator for IterInOrder<'a, V>
+impl<'a, K, V: 'a> Iterator for IterInOrder<'a, K, V>
 where
-    V: PartialEq + PartialOrd + 'a,
+    K: PartialEq + PartialOrd + 'a,
 {
-    type Item = &'a V;
+    type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(id) = self.left_most_node {
@@ -821,8 +837,9 @@ where
         }
         if let Some(up_from_current) = self.stack.pop() {
             self.left_most_node = up_from_current.as_ref().right;
+            let node = unsafe { &(*up_from_current.as_ptr()) };
 
-            Some(unsafe { &(*up_from_current.as_ptr()).inner })
+            Some((&node.key, &node.value))
         } else {
             None
         }
@@ -838,10 +855,10 @@ mod tests {
 
     #[test]
     fn should_return_correct_empty_state_when_tree_has_values() {
-        let tree = RedBlackTree::<usize>::default();
+        let tree = RedBlackTree::<usize, ()>::default();
 
         assert!(tree.is_empty());
-        assert!(!tree.insert(5).is_empty());
+        assert!(!tree.insert(5, ()).is_empty());
     }
 
     #[test]
@@ -851,7 +868,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         let root = unsafe {
             tree.find_nearest_node(&root_val)
@@ -878,26 +895,26 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         let child = unsafe {
             tree.find_nearest_node(&child_val)
-                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().key))
         };
 
         let parent = unsafe {
             tree.find_nearest_node(&parent_val)
-                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().key))
         };
 
         let uncle = unsafe {
             tree.find_nearest_node(&uncle_val)
-                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().key))
         };
 
         let grandparent = unsafe {
             tree.find_nearest_node(&grandparent_val)
-                .hit_then(|node| (node.as_ref().color(), node.as_ref().inner))
+                .hit_then(|node| (node.as_ref().color(), node.as_ref().key))
         };
 
         assert_eq!(Some((Color::Black, child_val)), child);
@@ -910,7 +927,7 @@ mod tests {
     fn should_return_correct_parent_relationships_on_left_rotation() {
         let mut tree = vec![10, 5, 15]
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         // rotate the root of the tree left
         unsafe { tree.rotate_left_mut(tree.root.unwrap()) };
@@ -936,7 +953,7 @@ mod tests {
     fn should_return_correct_parent_relationships_on_right_rotation() {
         let mut tree = vec![10, 5, 15]
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         // rotate the root of the tree right
         unsafe { tree.rotate_right_mut(tree.root.unwrap()) };
@@ -962,12 +979,12 @@ mod tests {
     fn should_yield_correct_min_and_max_for_a_given_tree() {
         let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
-        assert_eq!(Some(&25), tree.max());
-        assert_eq!(Some(&5), tree.min());
+        assert_eq!(Some((&25, &())), tree.max());
+        assert_eq!(Some((&5, &())), tree.min());
 
-        let empty_tree = RedBlackTree::<usize>::default();
+        let empty_tree = RedBlackTree::<usize, ()>::default();
 
         assert_eq!(None, empty_tree.max());
         assert_eq!(None, empty_tree.min());
@@ -977,22 +994,22 @@ mod tests {
     fn should_traverse_in_order() {
         let tree = vec![10, 5, 15, 25, 20]
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         let mut i = tree.traverse_in_order();
 
-        assert_eq!(Some(&5), i.next());
-        assert_eq!(Some(&10), i.next());
-        assert_eq!(Some(&15), i.next());
-        assert_eq!(Some(&20), i.next());
-        assert_eq!(Some(&25), i.next());
+        assert_eq!(Some((&5, &())), i.next());
+        assert_eq!(Some((&10, &())), i.next());
+        assert_eq!(Some((&15, &())), i.next());
+        assert_eq!(Some((&20, &())), i.next());
+        assert_eq!(Some((&25, &())), i.next());
         assert_eq!(None, i.next());
 
         let tree = (0..1024)
             .rev()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
-        let received: Vec<u16> = tree.traverse_in_order().copied().collect();
+        let received: Vec<u16> = tree.traverse_in_order().map(|(k, _)| k).copied().collect();
         let expected: Vec<u16> = (0..1024).collect();
         assert_eq!(expected, received);
     }
@@ -1003,7 +1020,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&1);
 
         let left_child_of_root = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) };
@@ -1017,7 +1034,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&10);
 
         let root = unsafe { tree.find_nearest_node(&5).hit_then(|node| node) };
@@ -1041,7 +1058,7 @@ mod tests {
         let tree = node_values
             .to_vec()
             .into_iter()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&5);
 
         // the new root to replace the deleted root
@@ -1072,11 +1089,11 @@ mod tests {
     fn should_retain_order_after_deletion() {
         let tree = (0..1024)
             .rev()
-            .fold(RedBlackTree::default(), |tree, x| tree.insert(x))
+            .fold(RedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&511)
             .remove(&512);
 
-        let received: Vec<u16> = tree.traverse_in_order().copied().collect();
+        let received: Vec<u16> = tree.traverse_in_order().map(|(k, _)| k).copied().collect();
         // skip 511 and 512
         let expected: Vec<u16> = (0..511).chain(513..1024).collect();
         assert_eq!(expected, received);

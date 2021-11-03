@@ -13,8 +13,10 @@ pub fn insertion(c: &mut Criterion) {
                 &sample_size,
                 |b, &s| {
                     b.iter(|| {
-                        let _populated_tree = (0..s)
-                            .fold(RedBlackTree::default(), |tree, x| tree.insert(black_box(x)));
+                        let _populated_tree = (0..s).fold(RedBlackTree::default(), |tree, x| {
+                            black_box(());
+                            tree.insert(black_box(x), ())
+                        });
                     })
                 },
             );
