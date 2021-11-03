@@ -214,9 +214,9 @@ where
     /// # Example
     ///
     /// ```
-    /// use collections_ext::tree::binary::BinaryTree;
+    /// use collections_ext::tree::binary::KeyedBinaryTree;
     ///
-    /// let tree = (0..1024).fold(BinaryTree::default(), |tree, x| tree.insert(x, x*2));
+    /// let tree = (0..1024).fold(KeyedBinaryTree::default(), |tree, x| tree.insert(x, x*2));
     /// assert!(tree.find_with_key_value(|k, v| k == &&513 && v == &&(513 * 2)).is_some());
     /// ```
     pub fn find_with_key_value<P>(&self, mut predicate: P) -> Option<&V>
