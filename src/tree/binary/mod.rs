@@ -107,6 +107,7 @@ where
             SearchResult::Empty
         }
     }
+
     /// Searches for a node in the tree that satisfies the given predicate.
     ///
     /// # Example
