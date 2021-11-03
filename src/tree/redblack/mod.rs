@@ -233,6 +233,25 @@ where
             .map(|(_, v)| v)
     }
 
+    /// Searches for a node in the tree that satisfies the given predicate.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x, x*2));
+    /// assert!(tree.find_with_key_value(|k, v| k == &&513 && v == &&(513 * 2)).is_some());
+    /// ```
+    pub fn find_with_key_value<P>(&self, mut predicate: P) -> Option<&V>
+    where
+        P: core::ops::FnMut(&&K, &&V) -> bool,
+    {
+        self.traverse_in_order()
+            .find(|(k, v)| predicate(k, v))
+            .map(|(_, v)| v)
+    }
+
     pub fn insert(mut self, key: K, value: V) -> Self {
         self.insert_mut(key, value);
         self
