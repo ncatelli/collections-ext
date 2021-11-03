@@ -178,6 +178,23 @@ where
         self.inner.is_empty()
     }
 
+    /// Searches for a node in the tree that satisfies the given predicate.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = (0..1024).fold(RedBlackTree::default(), |tree, x| tree.insert(x));
+    /// assert!(tree.find(|x| x == &&513).is_some());
+    /// ```
+    pub fn find<P>(&self, predicate: P) -> Option<&T>
+    where
+        P: FnMut(&&T) -> bool,
+    {
+        self.traverse_in_order().find(predicate)
+    }
+
     /// Inserts a value `T` into the tree returning a the modified tree in
     /// place.
     pub fn insert(mut self, value: T) -> Self {
