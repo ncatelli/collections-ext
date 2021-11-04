@@ -1,4 +1,4 @@
-use collections_ext::tree::redblack::RedBlackTree;
+use collections_ext::tree::redblack::KeyedRedBlackTree;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 pub fn insertion(c: &mut Criterion) {
@@ -13,8 +13,11 @@ pub fn insertion(c: &mut Criterion) {
                 &sample_size,
                 |b, &s| {
                     b.iter(|| {
-                        let _populated_tree = (0..s)
-                            .fold(RedBlackTree::default(), |tree, x| tree.insert(black_box(x)));
+                        let _populated_tree =
+                            (0..s).fold(KeyedRedBlackTree::default(), |tree, x| {
+                                black_box(());
+                                tree.insert(black_box(x), ())
+                            });
                     })
                 },
             );
