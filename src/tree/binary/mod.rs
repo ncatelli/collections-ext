@@ -76,6 +76,7 @@ where
     /// use collections_ext::tree::binary::BinaryTree;
     ///
     /// assert!(BinaryTree::<usize>::default().is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
