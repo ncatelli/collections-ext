@@ -253,6 +253,7 @@ where
     /// use collections_ext::tree::binary::KeyedBinaryTree;
     ///
     /// assert!(KeyedBinaryTree::<usize, usize>::default().is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
     }
