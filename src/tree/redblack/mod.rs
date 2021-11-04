@@ -174,6 +174,14 @@ where
     T: PartialEq + PartialOrd,
 {
     /// Returns a boolean representing if the tree is empty or not.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// assert!(RedBlackTree::<usize>::default().is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
@@ -197,6 +205,14 @@ where
 
     /// Inserts a value `T` into the tree returning a the modified tree in
     /// place.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// RedBlackTree::new(5).insert(10);
+    /// ```
     pub fn insert(mut self, value: T) -> Self {
         self.insert_mut(value);
         self
@@ -204,36 +220,93 @@ where
 
     /// Inserts a value `T` into the tree. If the value already exists in the
     /// tree, nothing is done.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let mut tree = RedBlackTree::new(5);
+    /// tree.insert_mut(10);
+    /// ```
     pub fn insert_mut(&mut self, value: T) {
         unsafe { self.inner.insert_mut_unchecked(value, ()) }
     }
 
     /// Remove a node, `T`, from the tree, returning the modifed tree.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = RedBlackTree::new(5).insert(10);
+    /// assert!(!tree.remove(&10).remove_mut(&10));
+    /// ```
     pub fn remove(mut self, value: &T) -> Self {
         self.remove_mut(value);
         self
     }
 
     /// Remove a value, `T`, from the tree in place.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let mut tree = RedBlackTree::new(5).insert(10);
+    /// assert!(tree.remove_mut(&10));
+    ///
+    /// // returns false if the value isn't in tree.
+    /// assert!(!tree.remove_mut(&20));
+    /// ```
     pub fn remove_mut(&mut self, value: &T) -> bool {
         unsafe { self.inner.remove_mut_unchecked(value) }.is_some()
     }
 
     /// Returns the node with the left-most value (smallest) or `None` if the
     /// tree is empty.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = RedBlackTree::new(5).insert(10);
+    /// assert_eq!(Some(&5), tree.min());
+    /// ```
     pub fn min(&self) -> Option<&T> {
         self.inner.min().map(|(value, _)| value)
     }
 
     /// Returns the node with the right-most value (largest) or `None` if the
     /// tree is empty.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = RedBlackTree::new(5).insert(10);
+    /// assert_eq!(Some(&10), tree.max());
+    /// ```
     pub fn max(&self) -> Option<&T> {
-        self.inner.min().map(|(value, _)| value)
+        self.inner.max().map(|(value, _)| value)
     }
 
     /// Returns an Iterator for traversing an array in order.
-    pub fn traverse_in_order(&self) -> IterKeysInOrder<'_, T> {
-        IterKeysInOrder::new(&self.inner)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = RedBlackTree::new(5);
+    /// assert_eq!(Some(&5), tree.traverse_in_order().next());
+    /// ```
+    pub fn traverse_in_order(&self) -> IterInOrder<'_, T> {
+        IterInOrder::new(&self.inner)
     }
 }
 
@@ -278,6 +351,14 @@ where
     K: PartialEq + PartialOrd,
 {
     /// Returns a boolean representing if the tree is empty or not.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// assert!(KeyedRedBlackTree::<usize, usize>::default().is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
     }
@@ -351,11 +432,32 @@ where
             .map(|(_, v)| v)
     }
 
+    /// Inserts a key `K` and value `V` into the tree returning a the modified
+    /// tree in place.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// KeyedRedBlackTree::new(5, 10).insert(15, 20);
+    /// ```
     pub fn insert(mut self, key: K, value: V) -> Self {
         self.insert_mut(key, value);
         self
     }
 
+    /// Inserts a key `K` and value `V` into the tree. If the value already
+    /// exists in the tree, nothing is done.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let mut tree = KeyedRedBlackTree::new(5, 10);
+    /// tree.insert(15, 20);
+    /// ```
     pub fn insert_mut(&mut self, key: K, value: V) {
         unsafe { self.insert_mut_unchecked(key, value) }
     }
@@ -385,11 +487,32 @@ where
         };
     }
 
+    /// Remove a node, `K` from the tree, returning the modifed tree.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let tree = KeyedRedBlackTree::new(5, 10).insert(15, 20);
+    /// assert_eq!(None, tree.remove(&5).remove_mut(&5));
+    /// ```
     pub fn remove(mut self, key: &K) -> Self {
         self.remove_mut(key);
         self
     }
 
+    /// Remove a value, `K`, from the tree in place. Optionally returning an
+    /// owned `V` associated with the passed `K`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let mut tree = KeyedRedBlackTree::new(5, 10).insert(15, 20);
+    /// assert_eq!(Some(10), tree.remove_mut(&5));
+    /// ```
     pub fn remove_mut(&mut self, key: &K) -> Option<V> {
         unsafe { self.remove_mut_unchecked(key) }
     }
@@ -834,6 +957,15 @@ where
 
     /// Returns the node with the left-most value (smallest) or `None` if the
     /// tree is empty.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let tree = KeyedRedBlackTree::new(5, 10).insert(15, 20);
+    /// assert_eq!(Some((&5, &10)), tree.min());
+    /// ```
     pub fn min(&self) -> Option<(&K, &V)> {
         unsafe {
             self.root
@@ -857,6 +989,15 @@ where
 
     /// Returns the node with the right-most value (largest) or `None` if the
     /// tree is empty.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let tree = KeyedRedBlackTree::new(5, 10).insert(15, 20);
+    /// assert_eq!(Some((&15, &20)), tree.max());
+    /// ```
     pub fn max(&self) -> Option<(&K, &V)> {
         unsafe {
             self.root
@@ -881,9 +1022,19 @@ where
         right_most_node
     }
 
-    /// Returns an Iterator for traversing an array in order.
-    pub fn traverse_in_order(&self) -> IterInOrder<'_, K, V> {
-        IterInOrder::new(self)
+    /// Returns an Iterator for traversing an array in order, returning the
+    /// key/value mapping of the tree.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let tree = KeyedRedBlackTree::new(5, 10);
+    /// assert_eq!(Some((&5, &10)), tree.traverse_in_order().next());
+    /// ```
+    pub fn traverse_in_order(&self) -> IterInOrderWithKeyValue<'_, K, V> {
+        IterInOrderWithKeyValue::new(self)
     }
 }
 
@@ -919,7 +1070,7 @@ where
     }
 }
 
-pub struct IterInOrder<'a, K, V>
+pub struct IterInOrderWithKeyValue<'a, K, V>
 where
     K: PartialEq + PartialOrd + 'a,
 {
@@ -928,7 +1079,7 @@ where
     stack: Vec<NodeRef<K, V, Color>>,
 }
 
-impl<'a, K, V: 'a> IterInOrder<'a, K, V>
+impl<'a, K, V: 'a> IterInOrderWithKeyValue<'a, K, V>
 where
     K: PartialEq + PartialOrd + 'a,
 {
@@ -941,7 +1092,7 @@ where
     }
 }
 
-impl<'a, K, V: 'a> Iterator for IterInOrder<'a, K, V>
+impl<'a, K, V: 'a> Iterator for IterInOrderWithKeyValue<'a, K, V>
 where
     K: PartialEq + PartialOrd + 'a,
 {
@@ -964,25 +1115,25 @@ where
     }
 }
 
-pub struct IterKeysInOrder<'a, T>
+pub struct IterInOrder<'a, T>
 where
     T: PartialEq + PartialOrd + 'a,
 {
-    inner: IterInOrder<'a, T, ()>,
+    inner: IterInOrderWithKeyValue<'a, T, ()>,
 }
 
-impl<'a, T: 'a> IterKeysInOrder<'a, T>
+impl<'a, T: 'a> IterInOrder<'a, T>
 where
     T: PartialEq + PartialOrd + 'a,
 {
     pub fn new(inner: &'a KeyedRedBlackTree<T, ()>) -> Self {
         Self {
-            inner: IterInOrder::new(inner),
+            inner: IterInOrderWithKeyValue::new(inner),
         }
     }
 }
 
-impl<'a, T: 'a> Iterator for IterKeysInOrder<'a, T>
+impl<'a, T: 'a> Iterator for IterInOrder<'a, T>
 where
     T: PartialEq + PartialOrd + 'a,
 {
