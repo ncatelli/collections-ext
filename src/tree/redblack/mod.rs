@@ -379,7 +379,7 @@ where
     /// assert!(KeyedRedBlackTree::<usize, usize>::default().is_empty());
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.root.is_none()
+        self.len == 0
     }
 
     /// Returns the number of nodes in a tree.
