@@ -186,6 +186,23 @@ where
         self.inner.is_empty()
     }
 
+    /// Returns the number of nodes in a tree.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::RedBlackTree;
+    ///
+    /// let tree = RedBlackTree::<usize>::default();
+    ///
+    /// assert_eq!(0, tree.len());
+    ///
+    /// assert_eq!(2, tree.insert(5).insert(10).len());
+    /// ```
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
     /// Searches for a node in the tree that satisfies the given predicate.
     ///
     /// # Example
@@ -327,6 +344,7 @@ pub struct KeyedRedBlackTree<K, V>
 where
     K: PartialEq + PartialOrd,
 {
+    len: usize,
     root: Option<NodeRef<K, V, Color>>,
 }
 
@@ -340,6 +358,7 @@ where
         let root_ptr = NodeRef::from(node);
 
         Self {
+            len: 1,
             root: Some(root_ptr),
         }
     }
@@ -360,7 +379,24 @@ where
     /// assert!(KeyedRedBlackTree::<usize, usize>::default().is_empty());
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.root.is_none()
+        self.len == 0
+    }
+
+    /// Returns the number of nodes in a tree.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collections_ext::tree::redblack::KeyedRedBlackTree;
+    ///
+    /// let tree = KeyedRedBlackTree::<usize, usize>::default();
+    ///
+    /// assert_eq!(0, tree.len());
+    ///
+    /// assert_eq!(2, tree.insert(5, 10).insert(15, 20).len());
+    /// ```
+    pub fn len(&self) -> usize {
+        self.len
     }
 
     /// Searches for a value in the tree returning a SearchResult that
@@ -468,12 +504,16 @@ where
             SearchResult::Hit(_) => (),
             SearchResult::Empty => {
                 let node = Node::new(key, value, None, None, None, Color::Black);
+
+                self.len += 1;
                 self.root = Some(NodeRef::from(node));
             }
             SearchResult::Miss(mut parent_node) => {
                 let is_left = key < parent_node.as_ref().key;
                 let child = Node::new(key, value, Some(parent_node), None, None, Color::Red);
                 let child_ptr = NodeRef::from(child);
+
+                self.len += 1;
                 if is_left {
                     parent_node.as_mut().left = Some(child_ptr);
                 } else {
@@ -554,6 +594,7 @@ where
 
                 x.as_mut().parent = boxed_node_to_be_deleted.parent;
 
+                self.len -= 1;
                 // Take ownership of the inner value
                 let inner = boxed_node_to_be_deleted.value;
                 Some(inner)
@@ -574,6 +615,7 @@ where
                     self.root = None;
                 }
 
+                self.len -= 1;
                 // Take ownership of the inner value
                 let inner = boxed_node_to_be_deleted.value;
                 Some(inner)
@@ -628,6 +670,7 @@ where
                     self.rebalance_on_deletion_mut(x, x_direction, Some(x_parent));
                 }
 
+                self.len -= 1;
                 let inner = boxed_node_to_be_deleted.value;
                 Some(inner)
             }
@@ -1066,7 +1109,7 @@ where
     K: PartialEq + PartialOrd,
 {
     fn default() -> Self {
-        Self { root: None }
+        Self { len: 0, root: None }
     }
 }
 
