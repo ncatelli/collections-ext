@@ -1,3 +1,5 @@
+//! Provides an implementation of a SparseSet as an alternative to HashSets.
+
 extern crate alloc;
 use alloc::{vec, vec::Vec};
 
