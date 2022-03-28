@@ -5,7 +5,7 @@ use alloc::{vec, vec::Vec};
 
 pub struct SparseSet {
     elems: usize,
-    dense: Vec<usize>,
+    dense: Vec<Option<usize>>,
     sparse: Vec<usize>,
 }
 
@@ -16,14 +16,16 @@ impl SparseSet {
     pub fn new(max_len: usize) -> Self {
         Self {
             elems: 0,
-            dense: Vec::new(),
+            // initialize 0th index to non-zero so it doesn't match as a set
+            // member by default.
+            dense: vec![],
             sparse: vec![0; max_len],
         }
     }
 
     /// Returns `true` if the set contains no elements.
     pub fn is_empty(&self) -> bool {
-        self.dense.is_empty()
+        self.elems == 0
     }
 
     /// Returns the number of elements that the set can hold without reallocating.
@@ -47,9 +49,15 @@ impl SparseSet {
             self.resize(val * 2)
         }
 
-        let sparse_ptr = self.dense.len();
-        self.dense.push(val);
-        self.sparse[val] = sparse_ptr;
+        let dense_len = self.dense.len();
+        let sparse_idx = self.sparse[val];
+        if dense_len > sparse_idx && self.dense[sparse_idx].is_none() {
+            self.dense[sparse_idx] = Some(val)
+        } else {
+            self.dense.push(Some(val));
+            self.sparse[val] = dense_len;
+        }
+
         self.elems += 1;
     }
 
@@ -66,17 +74,23 @@ impl SparseSet {
     ///
     /// Failing that will cause a panic.
     pub unsafe fn insert_unchecked(&mut self, val: usize) {
-        let sparse_ptr = self.dense.len();
-        self.dense.push(val);
-        self.sparse[val] = sparse_ptr;
-        self.elems += 1;
+        let dense_len = self.dense.len();
+        let sparse_idx = self.sparse[val];
+        if dense_len > sparse_idx && self.dense[sparse_idx].is_none() {
+            self.dense[sparse_idx] = Some(val)
+        } else {
+            self.dense.push(Some(val));
+            self.sparse[val] = dense_len;
+        }
+
+        self.elems += 1
     }
 
     /// Returns `true` if the set contains a value.
     pub fn contains(&self, val: &usize) -> bool {
         self.sparse
             .get(*val)
-            .map(|&dense_idx| self.dense.get(dense_idx) == Some(val))
+            .map(|&dense_idx| self.dense.get(dense_idx) == Some(&Some(*val)))
             // if none, the bounds of the set are exceeded and thus doesn't
             // contain the value.
             .unwrap_or(false)
@@ -106,7 +120,7 @@ impl SparseSet {
     /// Failing that will cause a panic.
     pub unsafe fn remove_unchecked(&mut self, val: &usize) {
         let dense_idx = self.sparse[*val];
-        self.dense[dense_idx] = 0;
+        self.dense[dense_idx] = None;
         self.elems -= 1;
     }
 
@@ -117,14 +131,6 @@ impl SparseSet {
 
     fn resize(&mut self, new_len: usize) {
         self.sparse.resize_with(new_len, || 0)
-    }
-}
-
-impl core::ops::Deref for SparseSet {
-    type Target = [usize];
-
-    fn deref(&self) -> &Self::Target {
-        &self.dense
     }
 }
 
@@ -162,5 +168,24 @@ mod tests {
         set.remove(&1);
         assert!(!set.contains(&1));
         assert_eq!(0, set.len());
+    }
+
+    #[test]
+    fn should_reuse_slots_on_delete() {
+        let mut set = SparseSet::new(0);
+
+        set.insert(1);
+        assert!(set.contains(&1));
+        assert_eq!(1, set.len());
+
+        // assert value was cleared from set
+        set.remove(&1);
+        assert!(!set.contains(&1));
+        assert!(set.dense.len() == 1 && set.dense[0].is_none());
+
+        // Re-add the previous value and assert slot is reused.
+        set.insert(1);
+        assert!(set.contains(&1));
+        assert!(set.dense.len() == 1 && set.dense[0] == Some(1));
     }
 }
