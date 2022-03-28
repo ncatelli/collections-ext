@@ -70,7 +70,7 @@ impl SparseSet {
     /// Callers of this function are responsible that these preconditions are
     /// satisfied:
     ///
-    /// * The starting index must not exceed the max length of the set;
+    /// * The value must not exceed the max length of the set;
     ///
     /// Failing that will cause a panic.
     pub unsafe fn insert_unchecked(&mut self, val: usize) {
@@ -106,19 +106,20 @@ impl SparseSet {
         }
     }
 
-    /// Inserts a value into the set.
+    /// Removes a value into the set.
     ///
-    /// This is the unchecked alternative to `insert`.
+    /// This is the unchecked alternative to `remove`.
     ///
     /// # Safety
     ///
     /// Callers of this function are responsible that these preconditions are
     /// satisfied:
     ///
-    /// * The starting index must not exceed the max length of the set;
+    /// * The value must not exceed the max length of the set;
+    /// * The value must be defined in the set.
     ///
     /// Failing that will cause a panic.
-    pub unsafe fn remove_unchecked(&mut self, val: &usize) {
+    unsafe fn remove_unchecked(&mut self, val: &usize) {
         let dense_idx = self.sparse[*val];
         self.dense[dense_idx] = None;
         self.elems -= 1;
