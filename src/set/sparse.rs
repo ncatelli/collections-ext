@@ -127,7 +127,8 @@ impl SparseSet {
 
     /// Clears the set, removing all values.
     pub fn clear(&mut self) {
-        self.dense.clear()
+        self.elems = 0;
+        self.dense.clear();
     }
 
     fn resize(&mut self, new_len: usize) {
