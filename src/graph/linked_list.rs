@@ -39,10 +39,13 @@ impl<D> AsMut<D> for Node<D> {
 pub type EdgeIdx = usize;
 
 pub trait IsEdge {
-    fn new_with_adjacent(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self;
-
-    fn target(&self) -> NodeIdx;
+    fn new(target: NodeIdx) -> Self;
+    fn new_with_adjacency(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self;
     fn next_adjacent_outgoing_edge(&self) -> Option<EdgeIdx>;
+}
+
+pub trait IsDirectedEdge: IsEdge {
+    fn target(&self) -> NodeIdx;
 }
 
 pub struct UnconstrainedEdge {
@@ -53,15 +56,18 @@ pub struct UnconstrainedEdge {
 }
 
 impl IsEdge for UnconstrainedEdge {
-    fn new_with_adjacent(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self {
+    fn new(target: NodeIdx) -> Self {
+        Self {
+            target,
+            next_outgoing_edge: None,
+        }
+    }
+
+    fn new_with_adjacency(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self {
         Self {
             target,
             next_outgoing_edge: adjacent,
         }
-    }
-
-    fn target(&self) -> NodeIdx {
-        self.target
     }
 
     fn next_adjacent_outgoing_edge(&self) -> Option<EdgeIdx> {
@@ -69,12 +75,18 @@ impl IsEdge for UnconstrainedEdge {
     }
 }
 
-pub struct Graph<ND, E: IsEdge> {
+impl IsDirectedEdge for UnconstrainedEdge {
+    fn target(&self) -> NodeIdx {
+        self.target
+    }
+}
+
+pub struct Graph<ND, E: IsDirectedEdge> {
     nodes: Vec<Node<ND>>,
     edges: Vec<E>,
 }
 
-impl<D, E: IsEdge> Graph<D, E> {
+impl<D, E: IsDirectedEdge> Graph<D, E> {
     pub fn new(nodes: Vec<Node<D>>, edges: Vec<E>) -> Self {
         Self { nodes, edges }
     }
@@ -103,7 +115,7 @@ impl<D, E: IsEdge> Graph<D, E> {
         let source_node = self.nodes.get_mut(source)?;
         let prev_head_edge_idx = source_node.first_outgoing_edge;
         self.edges
-            .push(<E>::new_with_adjacent(target, prev_head_edge_idx));
+            .push(<E>::new_with_adjacency(target, prev_head_edge_idx));
 
         source_node.with_outgoing_edge_mut(new_head_edge_idx);
         Some(new_head_edge_idx)
@@ -130,18 +142,18 @@ impl<D, E: IsEdge> Graph<D, E> {
     }
 }
 
-impl<D, E: IsEdge> Default for Graph<D, E> {
+impl<D, E: IsDirectedEdge> Default for Graph<D, E> {
     fn default() -> Self {
         Self::new(vec![], vec![])
     }
 }
 
-pub struct Successors<'g, D, E: IsEdge> {
+pub struct Successors<'g, D, E: IsDirectedEdge> {
     graph: &'g Graph<D, E>,
     current_edge_idx: Option<EdgeIdx>,
 }
 
-impl<'g, D, E: IsEdge> Iterator for Successors<'g, D, E> {
+impl<'g, D, E: IsDirectedEdge> Iterator for Successors<'g, D, E> {
     type Item = NodeIdx;
 
     fn next(&mut self) -> Option<Self::Item> {
