@@ -38,20 +38,44 @@ impl<D> AsMut<D> for Node<D> {
 
 pub type EdgeIdx = usize;
 
-pub struct Edge {
+pub trait IsEdge {
+    fn new_with_adjacent(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self;
+
+    fn target(&self) -> NodeIdx;
+    fn next_adjacent_outgoing_edge(&self) -> Option<EdgeIdx>;
+}
+
+pub struct UnconstrainedEdge {
     target: NodeIdx,
 
     /// The index for the first edge in a linked list of edges.
     next_outgoing_edge: Option<EdgeIdx>,
 }
 
-pub struct Graph<ND> {
-    nodes: Vec<Node<ND>>,
-    edges: Vec<Edge>,
+impl IsEdge for UnconstrainedEdge {
+    fn new_with_adjacent(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self {
+        Self {
+            target,
+            next_outgoing_edge: adjacent,
+        }
+    }
+
+    fn target(&self) -> NodeIdx {
+        self.target
+    }
+
+    fn next_adjacent_outgoing_edge(&self) -> Option<EdgeIdx> {
+        self.next_outgoing_edge
+    }
 }
 
-impl<D> Graph<D> {
-    pub fn new(nodes: Vec<Node<D>>, edges: Vec<Edge>) -> Self {
+pub struct Graph<ND, E: IsEdge> {
+    nodes: Vec<Node<ND>>,
+    edges: Vec<E>,
+}
+
+impl<D, E: IsEdge> Graph<D, E> {
+    pub fn new(nodes: Vec<Node<D>>, edges: Vec<E>) -> Self {
         Self { nodes, edges }
     }
 
@@ -78,16 +102,14 @@ impl<D> Graph<D> {
 
         let source_node = self.nodes.get_mut(source)?;
         let prev_head_edge_idx = source_node.first_outgoing_edge;
-        self.edges.push(Edge {
-            target,
-            next_outgoing_edge: prev_head_edge_idx,
-        });
+        self.edges
+            .push(<E>::new_with_adjacent(target, prev_head_edge_idx));
 
         source_node.with_outgoing_edge_mut(new_head_edge_idx);
         Some(new_head_edge_idx)
     }
 
-    pub fn successors(&self, source: NodeIdx) -> Successors<D> {
+    pub fn successors(&self, source: NodeIdx) -> Successors<D, E> {
         let first_outgoing_edge = self.nodes[source].first_outgoing_edge;
         Successors {
             graph: self,
@@ -103,23 +125,23 @@ impl<D> Graph<D> {
         self.nodes.get_mut(idx)
     }
 
-    pub fn get_edge(&self, idx: EdgeIdx) -> Option<&Edge> {
+    pub fn get_edge(&self, idx: EdgeIdx) -> Option<&E> {
         self.edges.get(idx)
     }
 }
 
-impl<D> Default for Graph<D> {
+impl<D, E: IsEdge> Default for Graph<D, E> {
     fn default() -> Self {
         Self::new(vec![], vec![])
     }
 }
 
-pub struct Successors<'g, D> {
-    graph: &'g Graph<D>,
+pub struct Successors<'g, D, E: IsEdge> {
+    graph: &'g Graph<D, E>,
     current_edge_idx: Option<EdgeIdx>,
 }
 
-impl<'g, D> Iterator for Successors<'g, D> {
+impl<'g, D, E: IsEdge> Iterator for Successors<'g, D, E> {
     type Item = NodeIdx;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -127,8 +149,8 @@ impl<'g, D> Iterator for Successors<'g, D> {
             None => None,
             Some(edge_idx) => {
                 let edge = &self.graph.edges[edge_idx];
-                self.current_edge_idx = edge.next_outgoing_edge;
-                Some(edge.target)
+                self.current_edge_idx = edge.next_adjacent_outgoing_edge();
+                Some(edge.target())
             }
         }
     }
@@ -140,7 +162,7 @@ mod tests {
 
     #[test]
     fn should_add_nodes() {
-        let mut graph = Graph::<()>::default();
+        let mut graph = Graph::<(), UnconstrainedEdge>::default();
 
         for i in 0..5 {
             let node_idx = graph.insert_node_mut(Node::new(()));
@@ -152,7 +174,7 @@ mod tests {
 
     #[test]
     fn should_fail_to_add_edge_to_non_existent_nodes() {
-        let mut graph = Graph::<()>::default();
+        let mut graph = Graph::<(), UnconstrainedEdge>::default();
 
         let n0 = graph.insert_node_mut(Node::new(()));
         let n1 = graph.insert_node_mut(Node::new(()));
@@ -166,7 +188,7 @@ mod tests {
 
     #[test]
     fn should_traverse_node_successors_order() {
-        let mut graph = Graph::<()>::default();
+        let mut graph = Graph::<(), UnconstrainedEdge>::default();
 
         let n0 = graph.insert_node_mut(Node::new(()));
         let n1 = graph.insert_node_mut(Node::new(()));
