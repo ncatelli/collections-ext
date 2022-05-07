@@ -1207,8 +1207,8 @@ mod tests {
         let node_values = [10, 5, 15];
         let [root_val, left_val, right_val] = node_values;
         let tree = node_values
-            .to_vec()
-            .into_iter()
+            .iter()
+            .copied()
             .fold(KeyedRedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         let root = unsafe {
@@ -1234,8 +1234,8 @@ mod tests {
         let node_values = [15, 20, 5, 10];
         let [grandparent_val, uncle_val, child_val, parent_val] = node_values;
         let tree = node_values
-            .to_vec()
-            .into_iter()
+            .iter()
+            .copied()
             .fold(KeyedRedBlackTree::default(), |tree, x| tree.insert(x, ()));
 
         let child = unsafe {
@@ -1359,8 +1359,8 @@ mod tests {
     fn should_remove_node_with_no_children() {
         let node_values = [10, 5, 1, 15];
         let tree = node_values
-            .to_vec()
-            .into_iter()
+            .iter()
+            .copied()
             .fold(KeyedRedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&1);
 
@@ -1373,8 +1373,8 @@ mod tests {
     fn should_remove_node_with_one_child_while_retaining_relationships() {
         let node_values = [10, 5, 1, 15];
         let tree = node_values
-            .to_vec()
-            .into_iter()
+            .iter()
+            .copied()
             .fold(KeyedRedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&10);
 
@@ -1397,8 +1397,8 @@ mod tests {
     fn should_remove_node_with_two_childen_while_retaining_relationships() {
         let node_values = [10, 5, 1, 15];
         let tree = node_values
-            .to_vec()
-            .into_iter()
+            .iter()
+            .copied()
             .fold(KeyedRedBlackTree::default(), |tree, x| tree.insert(x, ()))
             .remove(&5);
 
