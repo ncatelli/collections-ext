@@ -280,7 +280,6 @@ mod tests {
         graph.insert_edge_mut(n3, n2); // n3 -> n2
 
         let bft = BreadthFirstTraversal::new(n0, &graph);
-
         let iterated_nodes: Vec<_> = bft.collect();
 
         assert_eq!(&[n0, n3, n1, n2], &iterated_nodes[..])
