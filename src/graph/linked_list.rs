@@ -1,9 +1,39 @@
+//! An implementation of a simple append-only graph, using linked-lists for edges.
+//!
+//! # Example
+//!
+//! ```
+//! use collections_ext::graph::linked_list::*;
+//!
+//! let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
+//!
+//! let n0 = graph.insert_node_mut(Node::new(()));
+//! let n1 = graph.insert_node_mut(Node::new(()));
+//! let n2 = graph.insert_node_mut(Node::new(()));
+//! let n3 = graph.insert_node_mut(Node::new(()));
+//!
+//! graph.insert_edge_mut(n0, n1); // n0 -> n1
+//! graph.insert_edge_mut(n1, n2); // n1 -> n2
+//! graph.insert_edge_mut(n0, n3); // n0 -> n3
+//!
+//! // add loops
+//! graph.insert_edge_mut(n3, n2); // n3 -> n2
+//! graph.insert_edge_mut(n2, n0); // n3 -> n2
+//!
+//! let dfs = DepthFirstTraversal::new(n0, &graph);
+//! let iterated_nodes: Vec<_> = dfs.collect();
+//!
+//! assert_eq!(&[n0, n1, n2, n3], &iterated_nodes[..])
+//! ```
+
 extern crate alloc;
 
 use alloc::{collections::VecDeque, vec, vec::Vec};
 
 pub type NodeIdx = usize;
 
+/// Represents a Node, or State, in a graph storing a link to it's first edge
+/// and optional data.
 #[derive(Default)]
 pub struct Node<D> {
     data: D,
@@ -12,6 +42,7 @@ pub struct Node<D> {
 }
 
 impl<D> Node<D> {
+    // Instantiates a new node with the given data and no adjacent edges.
     pub fn new(data: D) -> Self {
         Self {
             data,
@@ -19,6 +50,7 @@ impl<D> Node<D> {
         }
     }
 
+    // Associates an edge to the node.
     fn with_outgoing_edge_mut(&mut self, edge_idx: EdgeIdx) {
         self.first_outgoing_edge = Some(edge_idx);
     }
@@ -38,12 +70,19 @@ impl<D> AsMut<D> for Node<D> {
 
 pub type EdgeIdx = usize;
 
+/// Provides methods for instantiating and interacting with an edge.
 pub trait IsEdge {
     fn new(target: NodeIdx) -> Self;
     fn new_with_adjacency(target: NodeIdx, adjacent: Option<EdgeIdx>) -> Self;
     fn next_adjacent_outgoing_edge(&self) -> Option<EdgeIdx>;
 }
 
+/// Provides methods for defining an undirected edge.
+pub trait IsUndirectedEdge: IsEdge {
+    fn links(&self) -> (NodeIdx, NodeIdx);
+}
+
+/// Provides methods for defining a directed edge.
 pub trait IsDirectedEdge: IsEdge {
     fn target(&self) -> NodeIdx;
 }
@@ -81,24 +120,47 @@ impl IsDirectedEdge for UnconstrainedDirectedEdge {
     }
 }
 
+/// Graph defines a graph with a given set of nodes and edges.
 pub struct Graph<ND, E: IsEdge> {
     nodes: Vec<Node<ND>>,
     edges: Vec<E>,
 }
 
-impl<D, E: IsDirectedEdge> Graph<D, E> {
+impl<D, E: IsEdge> Graph<D, E> {
+    /// Instantiates a new graph with a predefined list of nodes and edges.
     pub fn new(nodes: Vec<Node<D>>, edges: Vec<E>) -> Self {
         Self { nodes, edges }
     }
 
-    fn node_cnt(&self) -> usize {
+    /// Returns the number of nodes in a graph.
+    pub fn node_cnt(&self) -> usize {
         self.nodes.len()
     }
 
-    fn edge_cnt(&self) -> usize {
+    /// Returns the number of edges in a graph.
+    pub fn edge_cnt(&self) -> usize {
         self.edges.len()
     }
 
+    /// Borrows a node by its index if it exists in the graph.
+    pub fn get_node(&self, idx: NodeIdx) -> Option<&Node<D>> {
+        self.nodes.get(idx)
+    }
+
+    /// Mutably borrows a node by its index if it exists in the graph.
+    pub fn get_node_mut(&mut self, idx: NodeIdx) -> Option<&mut Node<D>> {
+        self.nodes.get_mut(idx)
+    }
+
+    /// Borrows an edge by its index if it exists in the graph.
+    pub fn get_edge(&self, idx: EdgeIdx) -> Option<&E> {
+        self.edges.get(idx)
+    }
+}
+
+impl<D, E: IsDirectedEdge> Graph<D, E> {
+    /// Immutably inserts a new node into a graph. Returning the modified graph
+    /// and the index for the newly inserted node.
     pub fn insert_node(mut self, node: Node<D>) -> (Self, NodeIdx) {
         let next_idx = self.node_cnt();
         self.insert_node_mut(node);
@@ -106,6 +168,7 @@ impl<D, E: IsDirectedEdge> Graph<D, E> {
         (self, next_idx)
     }
 
+    /// Inserts a node into the graph, returning the index.
     pub fn insert_node_mut(&mut self, node: Node<D>) -> NodeIdx {
         let next_idx = self.node_cnt();
         self.nodes.push(node);
@@ -113,13 +176,17 @@ impl<D, E: IsDirectedEdge> Graph<D, E> {
         next_idx
     }
 
-    pub fn insert_edge(mut self, source: NodeIdx, target: NodeIdx) -> Option<(Self, EdgeIdx)> {
-        let new_head_edge_idx = self.edge_cnt();
-        self.insert_edge_mut(source, target);
+    /// Immutably inserts a link between a source and target node in the graph.
+    /// Returning the modified graph and optionally the new edge index if it
+    /// could be created.
+    pub fn insert_edge(mut self, source: NodeIdx, target: NodeIdx) -> (Self, Option<EdgeIdx>) {
+        let new_head_edge_idx = self.insert_edge_mut(source, target);
 
-        Some((self, new_head_edge_idx))
+        (self, new_head_edge_idx)
     }
 
+    /// Inserts a new link between a source and target node, returning the new
+    /// index optionally if it can be created.
     pub fn insert_edge_mut(&mut self, source: NodeIdx, target: NodeIdx) -> Option<EdgeIdx> {
         let new_head_edge_idx = self.edge_cnt();
 
@@ -135,6 +202,7 @@ impl<D, E: IsDirectedEdge> Graph<D, E> {
         Some(new_head_edge_idx)
     }
 
+    /// Returns all direct successor nodes from a given node.
     pub fn successors(&self, source: NodeIdx) -> Successors<D, E> {
         let first_outgoing_edge = self.nodes[source].first_outgoing_edge;
         Successors {
@@ -142,26 +210,29 @@ impl<D, E: IsDirectedEdge> Graph<D, E> {
             current_edge_idx: first_outgoing_edge,
         }
     }
+}
 
-    pub fn get_node(&self, idx: NodeIdx) -> Option<&Node<D>> {
-        self.nodes.get(idx)
+impl<D, E: IsTraversableEdge> Graph<D, E> {
+    /// A helper method for returning a `DepthFirstTraveral` from the root of a
+    /// graph.
+    pub fn depth_first_traversal(&self) -> DepthFirstTraversal<D, E> {
+        DepthFirstTraversal::new(0, self)
     }
 
-    pub fn get_node_mut(&mut self, idx: NodeIdx) -> Option<&mut Node<D>> {
-        self.nodes.get_mut(idx)
-    }
-
-    pub fn get_edge(&self, idx: EdgeIdx) -> Option<&E> {
-        self.edges.get(idx)
+    /// A helper method for returning a `BreadthFirstTraveral` from the root of
+    /// a graph.
+    pub fn breadth_first_traversal(&self) -> BreadthFirstTraversal<D, E> {
+        BreadthFirstTraversal::new(0, self)
     }
 }
 
-impl<D, E: IsDirectedEdge> Default for Graph<D, E> {
+impl<D, E: IsEdge> Default for Graph<D, E> {
     fn default() -> Self {
         Self::new(vec![], vec![])
     }
 }
 
+/// Represents an iterator over all direct successors for a given node.
 pub struct Successors<'g, D, E: IsDirectedEdge> {
     graph: &'g Graph<D, E>,
     current_edge_idx: Option<EdgeIdx>,
@@ -182,16 +253,19 @@ impl<'g, D, E: IsDirectedEdge> Iterator for Successors<'g, D, E> {
     }
 }
 
-pub trait TraversableEdge: IsDirectedEdge {}
-impl<E: IsDirectedEdge> TraversableEdge for E {}
+/// Defines a marker trait for any edge that can be traversed.
+/// By default, this is implemented for any directed edge.
+pub trait IsTraversableEdge: IsDirectedEdge {}
+impl<E: IsDirectedEdge> IsTraversableEdge for E {}
 
-pub struct BreadthFirstTraversal<'g, D, E: TraversableEdge> {
+/// Provides breadth-first traversal over a graph.
+pub struct BreadthFirstTraversal<'g, D, E: IsTraversableEdge> {
     visited: Vec<bool>,
     graph: &'g Graph<D, E>,
     queue: VecDeque<NodeIdx>,
 }
 
-impl<'g, D, E: TraversableEdge> BreadthFirstTraversal<'g, D, E> {
+impl<'g, D, E: IsTraversableEdge> BreadthFirstTraversal<'g, D, E> {
     pub fn new(root: NodeIdx, graph: &'g Graph<D, E>) -> Self {
         let node_cnt = graph.node_cnt();
         let mut queue = VecDeque::with_capacity(node_cnt);
@@ -207,7 +281,7 @@ impl<'g, D, E: TraversableEdge> BreadthFirstTraversal<'g, D, E> {
     }
 }
 
-impl<'g, D, E: TraversableEdge> Iterator for BreadthFirstTraversal<'g, D, E> {
+impl<'g, D, E: IsTraversableEdge> Iterator for BreadthFirstTraversal<'g, D, E> {
     type Item = NodeIdx;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -230,13 +304,14 @@ impl<'g, D, E: TraversableEdge> Iterator for BreadthFirstTraversal<'g, D, E> {
     }
 }
 
-pub struct DepthFirstTraversal<'g, D, E: TraversableEdge> {
+/// Provides depth-first traversal over a graph.
+pub struct DepthFirstTraversal<'g, D, E: IsTraversableEdge> {
     visited: Vec<bool>,
     graph: &'g Graph<D, E>,
     stack: Vec<NodeIdx>,
 }
 
-impl<'g, D, E: TraversableEdge> DepthFirstTraversal<'g, D, E> {
+impl<'g, D, E: IsTraversableEdge> DepthFirstTraversal<'g, D, E> {
     pub fn new(root: NodeIdx, graph: &'g Graph<D, E>) -> Self {
         let node_cnt = graph.node_cnt();
         let mut stack = Vec::with_capacity(node_cnt);
@@ -252,7 +327,7 @@ impl<'g, D, E: TraversableEdge> DepthFirstTraversal<'g, D, E> {
     }
 }
 
-impl<'g, D, E: TraversableEdge> Iterator for DepthFirstTraversal<'g, D, E> {
+impl<'g, D, E: IsTraversableEdge> Iterator for DepthFirstTraversal<'g, D, E> {
     type Item = NodeIdx;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -302,7 +377,7 @@ mod tests {
             .iter()
             .copied()
             .fold(graph, |graph, (source, target)| {
-                graph.insert_edge(source, target).unwrap().0
+                graph.insert_edge(source, target).0
             });
         let successor_nodes: Vec<_> = graph.successors(0).collect();
         assert_eq!(&[3, 1], &successor_nodes[..]);
@@ -342,6 +417,11 @@ mod tests {
         let bft = BreadthFirstTraversal::new(n0, &graph);
         let iterated_nodes: Vec<_> = bft.collect();
 
+        assert_eq!(&[n0, n3, n1, n2], &iterated_nodes[..]);
+
+        let bfs = graph.breadth_first_traversal();
+        let iterated_nodes: Vec<_> = bfs.collect();
+
         assert_eq!(&[n0, n3, n1, n2], &iterated_nodes[..])
     }
 
@@ -363,6 +443,11 @@ mod tests {
         graph.insert_edge_mut(n2, n0); // n3 -> n2
 
         let dfs = DepthFirstTraversal::new(n0, &graph);
+        let iterated_nodes: Vec<_> = dfs.collect();
+
+        assert_eq!(&[n0, n1, n2, n3], &iterated_nodes[..]);
+
+        let dfs = graph.depth_first_traversal();
         let iterated_nodes: Vec<_> = dfs.collect();
 
         assert_eq!(&[n0, n1, n2, n3], &iterated_nodes[..])
