@@ -230,6 +230,51 @@ impl<'g, D, E: TraversableEdge> Iterator for BreadthFirstTraversal<'g, D, E> {
     }
 }
 
+pub struct DepthFirstTraversal<'g, D, E: TraversableEdge> {
+    visited: Vec<bool>,
+    graph: &'g Graph<D, E>,
+    stack: Vec<NodeIdx>,
+}
+
+impl<'g, D, E: TraversableEdge> DepthFirstTraversal<'g, D, E> {
+    pub fn new(root: NodeIdx, graph: &'g Graph<D, E>) -> Self {
+        let node_cnt = graph.node_cnt();
+        let mut stack = Vec::with_capacity(node_cnt);
+        let visited = vec![false; node_cnt];
+
+        stack.push(root);
+
+        Self {
+            visited,
+            graph,
+            stack,
+        }
+    }
+}
+
+impl<'g, D, E: TraversableEdge> Iterator for DepthFirstTraversal<'g, D, E> {
+    type Item = NodeIdx;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.stack.pop()?;
+
+        // early exit if visited already
+        if self.visited[current] {
+            None
+        } else {
+            self.visited[current] = true;
+            let successors = self.graph.successors(current);
+            for node in successors {
+                if !self.visited[node] {
+                    self.stack.push(node);
+                }
+            }
+
+            Some(current)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,5 +340,25 @@ mod tests {
         let iterated_nodes: Vec<_> = bft.collect();
 
         assert_eq!(&[n0, n3, n1, n2], &iterated_nodes[..])
+    }
+
+    #[test]
+    fn should_traverse_in_depth_first_order() {
+        let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
+
+        let n0 = graph.insert_node_mut(Node::new(()));
+        let n1 = graph.insert_node_mut(Node::new(()));
+        let n2 = graph.insert_node_mut(Node::new(()));
+        let n3 = graph.insert_node_mut(Node::new(()));
+
+        graph.insert_edge_mut(n0, n1); // n0 -> n1
+        graph.insert_edge_mut(n1, n2); // n1 -> n2
+        graph.insert_edge_mut(n0, n3); // n0 -> n3
+        graph.insert_edge_mut(n3, n2); // n3 -> n2
+
+        let dfs = DepthFirstTraversal::new(n0, &graph);
+        let iterated_nodes: Vec<_> = dfs.collect();
+
+        assert_eq!(&[n0, n1, n2, n3], &iterated_nodes[..])
     }
 }
