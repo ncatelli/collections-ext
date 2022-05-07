@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use alloc::{vec, vec::Vec};
+use alloc::{collections::VecDeque, vec, vec::Vec};
 
 pub type NodeIdx = usize;
 
@@ -81,7 +81,7 @@ impl IsDirectedEdge for UnconstrainedEdge {
     }
 }
 
-pub struct Graph<ND, E: IsDirectedEdge> {
+pub struct Graph<ND, E: IsEdge> {
     nodes: Vec<Node<ND>>,
     edges: Vec<E>,
 }
@@ -168,6 +168,54 @@ impl<'g, D, E: IsDirectedEdge> Iterator for Successors<'g, D, E> {
     }
 }
 
+pub trait TraversableEdge: IsDirectedEdge {}
+impl<E: IsDirectedEdge> TraversableEdge for E {}
+
+pub struct BreadthFirstTraversal<'g, D, E: TraversableEdge> {
+    visited: Vec<bool>,
+    graph: &'g Graph<D, E>,
+    queue: VecDeque<NodeIdx>,
+}
+
+impl<'g, D, E: TraversableEdge> BreadthFirstTraversal<'g, D, E> {
+    pub fn new(root: NodeIdx, graph: &'g Graph<D, E>) -> Self {
+        let node_cnt = graph.node_cnt();
+        let mut queue = VecDeque::with_capacity(node_cnt);
+        let visited = vec![false; node_cnt];
+
+        queue.push_back(root);
+
+        Self {
+            visited,
+            graph,
+            queue,
+        }
+    }
+}
+
+impl<'g, D, E: TraversableEdge> Iterator for BreadthFirstTraversal<'g, D, E> {
+    type Item = NodeIdx;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.queue.pop_front()?;
+
+        // early exit if visited already
+        if self.visited[current] {
+            None
+        } else {
+            self.visited[current] = true;
+            let successors = self.graph.successors(current);
+            for node in successors {
+                if !self.visited[node] {
+                    self.queue.push_back(node);
+                }
+            }
+
+            Some(current)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +263,26 @@ mod tests {
         let successor_nodes: Vec<_> = graph.successors(n0).collect();
 
         assert_eq!(&[n3, n1], &successor_nodes[..]);
+    }
+
+    #[test]
+    fn should_traverse_in_breadth_first_order() {
+        let mut graph = Graph::<(), UnconstrainedEdge>::default();
+
+        let n0 = graph.insert_node_mut(Node::new(()));
+        let n1 = graph.insert_node_mut(Node::new(()));
+        let n2 = graph.insert_node_mut(Node::new(()));
+        let n3 = graph.insert_node_mut(Node::new(()));
+
+        graph.insert_edge_mut(n0, n1); // n0 -> n1
+        graph.insert_edge_mut(n1, n2); // n1 -> n2
+        graph.insert_edge_mut(n0, n3); // n0 -> n3
+        graph.insert_edge_mut(n3, n2); // n3 -> n2
+
+        let bft = BreadthFirstTraversal::new(n0, &graph);
+
+        let iterated_nodes: Vec<_> = bft.collect();
+
+        assert_eq!(&[n0, n1, n3, n2], &iterated_nodes[..])
     }
 }
