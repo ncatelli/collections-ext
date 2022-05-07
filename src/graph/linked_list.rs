@@ -99,11 +99,25 @@ impl<D, E: IsDirectedEdge> Graph<D, E> {
         self.edges.len()
     }
 
+    pub fn insert_node(mut self, node: Node<D>) -> (Self, NodeIdx) {
+        let next_idx = self.node_cnt();
+        self.insert_node_mut(node);
+
+        (self, next_idx)
+    }
+
     pub fn insert_node_mut(&mut self, node: Node<D>) -> NodeIdx {
         let next_idx = self.node_cnt();
         self.nodes.push(node);
 
         next_idx
+    }
+
+    pub fn insert_edge(mut self, source: NodeIdx, target: NodeIdx) -> Option<(Self, EdgeIdx)> {
+        let new_head_edge_idx = self.edge_cnt();
+        self.insert_edge_mut(source, target);
+
+        Some((self, new_head_edge_idx))
     }
 
     pub fn insert_edge_mut(&mut self, source: NodeIdx, target: NodeIdx) -> Option<EdgeIdx> {
@@ -233,6 +247,23 @@ mod tests {
     }
 
     #[test]
+    fn should_construct_immutable_graph() {
+        let graph = (0..4).fold(
+            Graph::<(), UnconstrainedDirectedEdge>::default(),
+            |graph, _| graph.insert_node(Node::new(())).0,
+        );
+
+        let graph = [(0, 1), (1, 2), (0, 3), (3, 2)]
+            .iter()
+            .copied()
+            .fold(graph, |graph, (source, target)| {
+                graph.insert_edge(source, target).unwrap().0
+            });
+        let successor_nodes: Vec<_> = graph.successors(0).collect();
+        assert_eq!(&[3, 1], &successor_nodes[..]);
+    }
+
+    #[test]
     fn should_fail_to_add_edge_to_non_existent_nodes() {
         let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
 
@@ -244,25 +275,6 @@ mod tests {
         assert!(graph.insert_edge_mut(n0, n1).is_some());
         assert!(graph.insert_edge_mut(n0, n2).is_none());
         assert!(graph.insert_edge_mut(n0, n3).is_none());
-    }
-
-    #[test]
-    fn should_traverse_node_successors_order() {
-        let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
-
-        let n0 = graph.insert_node_mut(Node::new(()));
-        let n1 = graph.insert_node_mut(Node::new(()));
-        let n2 = graph.insert_node_mut(Node::new(()));
-        let n3 = graph.insert_node_mut(Node::new(()));
-
-        graph.insert_edge_mut(n0, n1); // n0 -> n1
-        graph.insert_edge_mut(n1, n2); // n1 -> n2
-        graph.insert_edge_mut(n0, n3); // n0 -> n3
-        graph.insert_edge_mut(n3, n2); // n3 -> n2
-
-        let successor_nodes: Vec<_> = graph.successors(n0).collect();
-
-        assert_eq!(&[n3, n1], &successor_nodes[..]);
     }
 
     #[test]
