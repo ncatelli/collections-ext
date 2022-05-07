@@ -48,14 +48,14 @@ pub trait IsDirectedEdge: IsEdge {
     fn target(&self) -> NodeIdx;
 }
 
-pub struct UnconstrainedEdge {
+pub struct UnconstrainedDirectedEdge {
     target: NodeIdx,
 
     /// The index for the first edge in a linked list of edges.
     next_outgoing_edge: Option<EdgeIdx>,
 }
 
-impl IsEdge for UnconstrainedEdge {
+impl IsEdge for UnconstrainedDirectedEdge {
     fn new(target: NodeIdx) -> Self {
         Self {
             target,
@@ -75,7 +75,7 @@ impl IsEdge for UnconstrainedEdge {
     }
 }
 
-impl IsDirectedEdge for UnconstrainedEdge {
+impl IsDirectedEdge for UnconstrainedDirectedEdge {
     fn target(&self) -> NodeIdx {
         self.target
     }
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn should_add_nodes() {
-        let mut graph = Graph::<(), UnconstrainedEdge>::default();
+        let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
 
         for i in 0..5 {
             let node_idx = graph.insert_node_mut(Node::new(()));
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn should_fail_to_add_edge_to_non_existent_nodes() {
-        let mut graph = Graph::<(), UnconstrainedEdge>::default();
+        let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
 
         let n0 = graph.insert_node_mut(Node::new(()));
         let n1 = graph.insert_node_mut(Node::new(()));
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn should_traverse_node_successors_order() {
-        let mut graph = Graph::<(), UnconstrainedEdge>::default();
+        let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
 
         let n0 = graph.insert_node_mut(Node::new(()));
         let n1 = graph.insert_node_mut(Node::new(()));
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn should_traverse_in_breadth_first_order() {
-        let mut graph = Graph::<(), UnconstrainedEdge>::default();
+        let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
 
         let n0 = graph.insert_node_mut(Node::new(()));
         let n1 = graph.insert_node_mut(Node::new(()));
