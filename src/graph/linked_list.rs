@@ -334,7 +334,10 @@ mod tests {
         graph.insert_edge_mut(n0, n1); // n0 -> n1
         graph.insert_edge_mut(n1, n2); // n1 -> n2
         graph.insert_edge_mut(n0, n3); // n0 -> n3
+
+        // add loops
         graph.insert_edge_mut(n3, n2); // n3 -> n2
+        graph.insert_edge_mut(n2, n0); // n3 -> n2
 
         let bft = BreadthFirstTraversal::new(n0, &graph);
         let iterated_nodes: Vec<_> = bft.collect();
@@ -354,7 +357,10 @@ mod tests {
         graph.insert_edge_mut(n0, n1); // n0 -> n1
         graph.insert_edge_mut(n1, n2); // n1 -> n2
         graph.insert_edge_mut(n0, n3); // n0 -> n3
+
+        // add loops
         graph.insert_edge_mut(n3, n2); // n3 -> n2
+        graph.insert_edge_mut(n2, n0); // n3 -> n2
 
         let dfs = DepthFirstTraversal::new(n0, &graph);
         let iterated_nodes: Vec<_> = dfs.collect();
