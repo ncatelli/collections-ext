@@ -283,6 +283,6 @@ mod tests {
 
         let iterated_nodes: Vec<_> = bft.collect();
 
-        assert_eq!(&[n0, n1, n3, n2], &iterated_nodes[..])
+        assert_eq!(&[n0, n3, n1, n2], &iterated_nodes[..])
     }
 }
