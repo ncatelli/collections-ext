@@ -3,7 +3,7 @@
 //! # Example
 //!
 //! ```
-//! use collections_ext::graph::linked_list::*;
+//! use collections_ext::graph::graph::*;
 //!
 //! let mut graph = Graph::<(), UnconstrainedDirectedEdge>::default();
 //!
